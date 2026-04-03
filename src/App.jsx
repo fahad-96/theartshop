@@ -198,10 +198,10 @@ export default function App() {
       </section>
 
       {/* PANEL 2: Shop Gallery */}
-      <section id="shop" className="min-h-[150vh] w-full px-4 md:px-12 py-40 bg-[#0d0d0d] text-white relative overflow-hidden">
-        <h2 className="text-5xl md:text-8xl font-black mb-16 tracking-tighter text-transparent border-text-white z-20 relative text-center">CURATED ORIGINALS</h2>
+      <section id="shop" className="min-h-[150vh] w-full px-3 md:px-12 py-24 md:py-40 bg-[#0d0d0d] text-white relative overflow-hidden">
+        <h2 className="text-4xl md:text-8xl font-black mb-10 md:mb-16 tracking-tighter text-transparent border-text-white z-20 relative text-center">CURATED ORIGINALS</h2>
         
-        <div className="w-full max-w-md mx-auto mb-24">
+        <div className="w-full max-w-md mx-auto mb-12 md:mb-24">
           <div className="relative">
             <input 
               type="text" 
@@ -219,25 +219,25 @@ export default function App() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-x-12 md:gap-y-40">
+        <div className="grid grid-cols-3 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-x-12 md:gap-y-40">
           {filteredProducts.map((product, i) => (
             <motion.div key={product.id} initial={{ y: 150, opacity: 0, scale: 0.95 }} whileInView={{ y: 0, opacity: 1, scale: 1 }} viewport={{ once: true, margin: "-100px" }} transition={{ duration: 1.2, delay: (i % 3) * 0.1, ease: [0.76, 0, 0.24, 1] }} className={`flex flex-col relative w-full ${i % 3 === 1 ? 'md:mt-32' : ''}`}>
-              <div className="overflow-hidden bg-[#1f1f1f] aspect-[3/4] relative mask-container group">
+              <div className="overflow-hidden bg-[#1f1f1f] aspect-[2/3] md:aspect-[3/4] relative mask-container group">
                 <motion.img src={product.src} alt={product.title} className="w-full h-full object-cover scale-[1.15] opacity-60 group-hover:opacity-100 group-hover:scale-100 transition-all duration-[1s] ease-[cubic-bezier(0.76,0,0.24,1)] grayscale group-hover:grayscale-0" />
                 <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors duration-[1s] pointer-events-none" />
               </div>
-              <div className="flex justify-between items-start mt-8 group mb-12">
-                <h3 className="font-bold tracking-[0.2em] text-xs uppercase">{product.title}</h3>
+              <div className="flex justify-between items-start mt-3 md:mt-8 group mb-4 md:mb-12 gap-2">
+                <h3 className="font-bold tracking-[0.08em] md:tracking-[0.2em] text-[9px] sm:text-[10px] md:text-xs uppercase truncate max-w-[68%]">{product.title}</h3>
                 <div className="text-right flex flex-col items-end gap-2">
                   <div className="flex flex-col items-end gap-1">
-                    <span className="text-xs text-white/30 line-through tracking-widest">₹{product.mrp}</span>
-                    <span className="text-xl font-black tracking-tight">₹{product.price}</span>
+                    <span className="text-[9px] md:text-xs text-white/30 line-through tracking-[0.08em] md:tracking-widest">₹{product.mrp}</span>
+                    <span className="text-sm md:text-xl font-black tracking-tight">₹{product.price}</span>
                   </div>
                   <a 
                     href={`https://wa.me/+916006448855?text=I'm interested in buying ${encodeURIComponent(product.title)}`} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="mt-2 border border-white/50 text-white px-4 py-1 text-xs uppercase tracking-widest font-bold hover:bg-white hover:text-black transition-colors"
+                    className="mt-1 md:mt-2 border border-white/50 text-white px-2.5 md:px-4 py-1 text-[9px] md:text-xs uppercase tracking-[0.1em] md:tracking-widest font-bold hover:bg-white hover:text-black transition-colors"
                   >
                     Get
                   </a>
