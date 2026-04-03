@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: #000; /* Fallback for deep dark mode */
+}
+
+html {
+  /* Remove scroll-snap for a smoother Lenis-based smooth scrolling experience */
+  scroll-behavior: initial;
+}
+
+/* Base custom font stack mimicking modern agency websites */
+body {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  overflow-x: hidden;
+}
+
+/* For footer hollow styling and marquee stroke */
+.border-text-white {
+  color: transparent;
+  -webkit-text-stroke: 1px white;
+}
+
+.mask-container {
+  mask-image: linear-gradient(to bottom, black 0%, black 75%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 75%, transparent 100%);
+}
+
+/* Text Animation from Splitting.js */
+.word {
+  transform: translateY(100%);
+  opacity: 0;
+  transition: all 0.5s;
+  animation: slide-up 1.4s cubic-bezier(0.76, 0, 0.24, 1) forwards;
+}
+
+@keyframes slide-up {
+  100% {
+    transform: translateY(0%);
+    opacity: 1;
+  }
+}
+
+.char {
+  transform: translateY(100%);
+  opacity: 0;
+  animation: slide-up-char 1.4s cubic-bezier(0.76, 0, 0.24, 1) forwards;
+  animation-delay: calc(0.2s + (0.02s * var(--char-index)));
+}
+
+@keyframes slide-up-char {
+  100% {
+    transform: translateY(0%);
+    opacity: 1;
+  }
+}
+
+/* Ensure canvas doesn't steal pointer events in empty space */
+canvas {
+  pointer-events: none;
+}
