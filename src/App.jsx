@@ -27,8 +27,9 @@ const products = filenames.map((filename, i) => {
   };
 });
 
-const HERO_VIDEO_SRC = "/videos/hero.mp4";
-const SECTION_CONNECTOR_VIDEO_SRC = "/videos/section-connector.mp4";
+const BASE_URL = import.meta.env.BASE_URL;
+const HERO_VIDEO_SRC = `${BASE_URL}videos/hero.mp4`;
+const SECTION_CONNECTOR_VIDEO_SRC = `${BASE_URL}videos/section-connector.mp4`;
 
 const Preloader = ({ onComplete }) => {
   const words = ["The", "Art", "Shop"];
@@ -142,7 +143,7 @@ export default function App() {
         className="fixed top-0 w-full py-4 px-6 md:px-12 flex justify-between items-center z-50 bg-black text-white"
       >
         <div className="flex-1 flex justify-start items-center">
-          <img src="/logo.svg" alt="Logo" className="h-[40px] md:h-[60px] w-auto object-contain cursor-pointer" />
+          <img src={`${BASE_URL}logo.svg`} alt="Logo" className="h-[40px] md:h-[60px] w-auto object-contain cursor-pointer" />
         </div>
         
         <div className="flex-1 flex justify-center items-center">
