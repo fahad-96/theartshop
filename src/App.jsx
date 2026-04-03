@@ -29,6 +29,7 @@ const products = filenames.map((filename, i) => {
 
 const BASE_URL = import.meta.env.BASE_URL;
 const HERO_VIDEO_SRC = `${BASE_URL}videos/hero.mp4`;
+const HERO_VIDEO_MOBILE_SRC = `${BASE_URL}videos/hero-mobile.mp4`;
 const SECTION_CONNECTOR_VIDEO_SRC = `${BASE_URL}videos/section-connector.mp4`;
 
 const Preloader = ({ onComplete }) => {
@@ -165,13 +166,15 @@ export default function App() {
       {/* PANEL 1: Hero */}
       <section id="home" className="h-screen w-full flex flex-col justify-center items-center relative overflow-hidden bg-black">
         <video
-          src={HERO_VIDEO_SRC}
           autoPlay
           muted
           loop
           playsInline
           className="absolute inset-0 w-full h-full object-cover opacity-90"
-        />
+        >
+          <source src={HERO_VIDEO_MOBILE_SRC} media="(max-width: 768px)" type="video/mp4" />
+          <source src={HERO_VIDEO_SRC} type="video/mp4" />
+        </video>
         <div className="absolute inset-0 bg-black/35" />
         {/* This is removed as requested */}
         {/* <motion.div style={{ y: yHeroText }} className="z-10 text-center pointer-events-none uppercase">
