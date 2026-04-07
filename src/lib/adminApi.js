@@ -281,6 +281,86 @@ export const saveProductReview = async (supabase, productId, review) => {
   return data?.[0] || null;
 };
 
+// ── Customer Management ──
+
+export const fetchAdminCustomers = async (supabase, filters = {}) => {
+  let query = supabase
+    .from("profiles")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (filters.search?.trim()) {
+    const term = filters.search.trim();
+    query = query.or(`email.ilike.%${term}%,full_name.ilike.%${term}%,phone.ilike.%${term}%`);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(`Fetch customers failed: ${error.message}`);
+  return data || [];
+};
+
+export const fetchCustomerOrders = async (supabase, userId) => {
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(`Fetch customer orders failed: ${error.message}`);
+  return data || [];
+};
+
+export const banCustomer = async (supabase, userId) => {
+  const { data, error } = await supabase.rpc("admin_ban_user", { target_user_id: userId });
+  if (error) throw new Error(`Ban user failed: ${error.message}`);
+  return data;
+};
+
+export const unbanCustomer = async (supabase, userId) => {
+  const { data, error } = await supabase.rpc("admin_unban_user", { target_user_id: userId });
+  if (error) throw new Error(`Unban user failed: ${error.message}`);
+  return data;
+};
+
+export const deleteCustomer = async (supabase, userId) => {
+  const { data, error } = await supabase.rpc("admin_delete_user", { target_user_id: userId });
+  if (error) throw new Error(`Delete user failed: ${error.message}`);
+  return data;
+};
+
+// ── Coupon Management ──
+
+export const fetchAdminCoupons = async (supabase) => {
+  const { data, error } = await supabase
+    .from("coupons")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(`Fetch coupons failed: ${error.message}`);
+  return data || [];
+};
+
+export const saveAdminCoupon = async (supabase, payload) => {
+  const { data, error } = await supabase
+    .from("coupons")
+    .upsert(payload, { onConflict: "id" })
+    .select("*")
+    .single();
+
+  if (error) throw new Error(`Save coupon failed: ${error.message}`);
+  return data;
+};
+
+export const deleteAdminCoupon = async (supabase, couponId) => {
+  const { error } = await supabase
+    .from("coupons")
+    .delete()
+    .eq("id", couponId);
+
+  if (error) throw new Error(`Delete coupon failed: ${error.message}`);
+  return true;
+};
+
 export const applyCoupon = async (supabase, couponCode, cartTotal) => {
   const { data, error } = await supabase
     .from('coupons')
