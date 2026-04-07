@@ -55,7 +55,7 @@ export default function ProductCard({ product, index }) {
         </p>
         <div className="flex items-center justify-between gap-2">
           <Link
-            to={`/product/${product.id}`}
+            to={`/product/${product.slug || product.id}`}
             className="border border-white/50 text-white px-2.5 md:px-4 py-1 text-[9px] md:text-xs uppercase tracking-[0.1em] md:tracking-widest font-bold hover:bg-white hover:text-black transition-colors"
           >
             View

@@ -4,12 +4,8 @@ import { isSupabaseConfigured, supabase } from "../lib/supabaseClient";
 
 const ShopContext = createContext(null);
 
-const USERS_STORAGE_KEY = "tas-users";
-const CURRENT_USER_STORAGE_KEY = "tas-current-user";
 const CART_STORAGE_KEY = "tas-cart";
-const ORDERS_STORAGE_KEY = "tas-orders";
 const WISHLIST_STORAGE_KEY = "tas-wishlist";
-const SUPABASE_EMAIL_REDIRECT_URL = import.meta.env.VITE_SUPABASE_EMAIL_REDIRECT_URL;
 
 const EMPTY_SHIPPING_DETAILS = {
   fullName: "",
@@ -47,34 +43,6 @@ const detailsToProfileRow = (user, details) => ({
   landmark: details.landmark || "",
   address: details.address || "",
 });
-
-const localOrdersMap = () => {
-  try {
-    return JSON.parse(localStorage.getItem(ORDERS_STORAGE_KEY) || "{}");
-  } catch {
-    return {};
-  }
-};
-
-const seedOrdersFor = (email) => ([
-  {
-    id: `mock-${email}-1`,
-    date: "2026-03-10",
-    amount: 2997,
-    status: "Delivered",
-    items: [
-      { title: "MESSI", size: "L", qty: 1 },
-      { title: "THINK", size: "S", qty: 2 },
-    ],
-  },
-  {
-    id: `mock-${email}-2`,
-    date: "2026-02-02",
-    amount: 1499,
-    status: "Shipped",
-    items: [{ title: "DEER HEAD", size: "L", qty: 1 }],
-  },
-]);
 
 const mapOrderRowToState = (row) => ({
   id: row.order_ref || row.id,
@@ -282,38 +250,12 @@ export function ShopProvider({ children }) {
   useEffect(() => {
     let mounted = true;
 
-    const bootLocal = () => {
-      const storedUser = localStorage.getItem(CURRENT_USER_STORAGE_KEY);
-      if (!storedUser) {
-        clearAuthState();
-        return;
-      }
-
-      try {
-        const parsed = JSON.parse(storedUser);
-        setAuthUser(parsed);
-        const details = normalizeShippingDetails(parsed.addressDetails || parsed.address, parsed.name);
-        setShippingDetails(details);
-
-        const ordersMap = localOrdersMap();
-        if (!ordersMap[parsed.email]) {
-          ordersMap[parsed.email] = seedOrdersFor(parsed.email);
-          localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(ordersMap));
-        }
-        setOrders(ordersMap[parsed.email] || []);
-      } catch {
-        clearAuthState();
-      }
-
-      setAuthReady(true);
-    };
-
     const boot = async () => {
       try {
         await loadCatalog();
 
         if (!isSupabaseConfigured || !supabase) {
-          bootLocal();
+          clearAuthState();
           return;
         }
 
@@ -346,7 +288,7 @@ export function ShopProvider({ children }) {
         return () => subscription.unsubscribe();
       } catch (error) {
         console.error("Auth bootstrap failed", error);
-        bootLocal();
+        clearAuthState();
       }
     };
 
@@ -457,45 +399,34 @@ export function ShopProvider({ children }) {
   }, [cartItems]);
 
   const login = async ({ email, password }) => {
-    const normalizedEmail = email.trim().toLowerCase();
-
-    if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: normalizedEmail,
-        password,
-      });
-
-      if (error) {
-        setAuthError(error.message);
-        return { ok: false };
-      }
-
-      const sessionUser = data.session?.user || data.user || null;
-      if (sessionUser) await hydrateSupabaseUser(sessionUser);
-      setAuthError("");
-      return { ok: true };
-    }
-
-    const users = JSON.parse(localStorage.getItem(USERS_STORAGE_KEY) || "[]");
-    const found = users.find((user) => user.email === normalizedEmail && user.password === password);
-
-    if (!found) {
-      setAuthError("Invalid email or password.");
+    if (!isSupabaseConfigured || !supabase) {
+      setAuthError("Authentication service is not configured.");
       return { ok: false };
     }
 
-    setAuthUser({
-      name: found.name,
-      email: found.email,
-      address: found.address,
-      addressDetails: normalizeShippingDetails(found.addressDetails || found.address, found.name),
+    const normalizedEmail = email.trim().toLowerCase();
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
     });
-    setShippingDetails(normalizeShippingDetails(found.addressDetails || found.address, found.name));
+
+    if (error) {
+      setAuthError(error.message);
+      return { ok: false };
+    }
+
+    const sessionUser = data.session?.user || data.user || null;
+    if (sessionUser) await hydrateSupabaseUser(sessionUser);
     setAuthError("");
     return { ok: true };
   };
 
   const signup = async ({ name, email, password, address = "" }) => {
+    if (!isSupabaseConfigured || !supabase) {
+      setAuthError("Authentication service is not configured.");
+      return { ok: false };
+    }
+
     const normalizedEmail = email.trim().toLowerCase();
     const emailRedirectTo = `${window.location.origin}${import.meta.env.BASE_URL}auth/confirmed`;
     const signupOptions = {
@@ -503,98 +434,61 @@ export function ShopProvider({ children }) {
       emailRedirectTo,
     };
 
-    if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase.auth.signUp({
-        email: normalizedEmail,
-        password,
-        options: signupOptions,
-      });
+    const { data, error } = await supabase.auth.signUp({
+      email: normalizedEmail,
+      password,
+      options: signupOptions,
+    });
 
-      if (error) {
-        setAuthError(error.message);
-        return { ok: false };
-      }
-
-      if (!data.session?.user) {
-        setAuthError("Please verify your email to activate your account.");
-        return { ok: false, needsLogin: true };
-      }
-
-      const sessionUser = data.session.user;
-      const nextDetails = {
-        fullName: name.trim(),
-        phone: "",
-        landmark: "",
-        address: (address || "").trim(),
-      };
-
-      const { error: profileError } = await supabase.from("profiles").upsert(
-        detailsToProfileRow(sessionUser, nextDetails),
-        { onConflict: "user_id" }
-      );
-
-      if (profileError) {
-        setAuthError(profileError.message);
-        return { ok: false };
-      }
-
-      await hydrateSupabaseUser(sessionUser);
-      setShippingDetails(nextDetails);
-      setAuthError("");
-      return { ok: true };
-    }
-
-    const users = JSON.parse(localStorage.getItem(USERS_STORAGE_KEY) || "[]");
-    const already = users.find((user) => user.email === normalizedEmail);
-
-    if (already) {
-      setAuthError("An account with this email already exists.");
+    if (error) {
+      setAuthError(error.message);
       return { ok: false };
     }
 
-    const newUser = {
-      name: name.trim(),
-      email: normalizedEmail,
-      password,
+    if (!data.session?.user) {
+      setAuthError("Please verify your email to activate your account.");
+      return { ok: false, needsLogin: true };
+    }
+
+    const sessionUser = data.session.user;
+    const nextDetails = {
+      fullName: name.trim(),
+      phone: "",
+      landmark: "",
       address: (address || "").trim(),
-      addressDetails: {
-        fullName: name.trim(),
-        phone: "",
-        landmark: "",
-        address: (address || "").trim(),
-      },
     };
 
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify([...users, newUser]));
-    setAuthUser({
-      name: newUser.name,
-      email: newUser.email,
-      address: newUser.address,
-      addressDetails: newUser.addressDetails,
-    });
-    setShippingDetails(newUser.addressDetails);
+    const { error: profileError } = await supabase.from("profiles").upsert(
+      detailsToProfileRow(sessionUser, nextDetails),
+      { onConflict: "user_id" }
+    );
+
+    if (profileError) {
+      setAuthError(profileError.message);
+      return { ok: false };
+    }
+
+    await hydrateSupabaseUser(sessionUser);
+    setShippingDetails(nextDetails);
     setAuthError("");
     return { ok: true };
   };
 
   const logout = async () => {
+    clearAuthState();
     if (isSupabaseConfigured && supabase) {
-      // Clear UI state immediately so logout feels instant even if network is slow.
-      clearAuthState();
       try {
         await supabase.auth.signOut();
       } catch (error) {
         console.error("Logout failed", error);
       }
-      return;
     }
-
-    clearAuthState();
   };
 
   const changePasswordWithCurrent = async ({ currentPassword, newPassword }) => {
     try {
       if (!authUser?.email) return { ok: false, message: "Please login first." };
+      if (!isSupabaseConfigured || !supabase) return { ok: false, message: "Authentication service is not configured." };
 
       const trimmedCurrent = currentPassword?.trim() || "";
       const trimmedNext = newPassword?.trim() || "";
@@ -606,39 +500,28 @@ export function ShopProvider({ children }) {
         return { ok: false, message: "New password must be at least 6 characters." };
       }
 
-      if (isSupabaseConfigured && supabase) {
-        const { error: reauthError } = await withTimeout(
-          supabase.auth.signInWithPassword({
-            email: authUser.email,
-            password: trimmedCurrent,
-          }),
-          15000,
-          "Password verification timed out. Please try again."
-        );
+      const { error: reauthError } = await withTimeout(
+        supabase.auth.signInWithPassword({
+          email: authUser.email,
+          password: trimmedCurrent,
+        }),
+        15000,
+        "Password verification timed out. Please try again."
+      );
 
-        if (reauthError) {
-          return { ok: false, message: "Current password is incorrect." };
-        }
-
-        const { error: updateError } = await withTimeout(
-          supabase.auth.updateUser({ password: trimmedNext }),
-          15000,
-          "Password update timed out. Please try again."
-        );
-        if (updateError) {
-          return { ok: false, message: updateError.message || "Password update failed." };
-        }
-
-        return { ok: true, message: "Password changed successfully." };
+      if (reauthError) {
+        return { ok: false, message: "Current password is incorrect." };
       }
 
-      const users = JSON.parse(localStorage.getItem(USERS_STORAGE_KEY) || "[]");
-      const userIndex = users.findIndex((user) => user.email === authUser.email);
-      if (userIndex === -1) return { ok: false, message: "Account not found." };
-      if (users[userIndex].password !== trimmedCurrent) return { ok: false, message: "Current password is incorrect." };
+      const { error: updateError } = await withTimeout(
+        supabase.auth.updateUser({ password: trimmedNext }),
+        15000,
+        "Password update timed out. Please try again."
+      );
+      if (updateError) {
+        return { ok: false, message: updateError.message || "Password update failed." };
+      }
 
-      users[userIndex] = { ...users[userIndex], password: trimmedNext };
-      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
       return { ok: true, message: "Password changed successfully." };
     } catch (error) {
       return { ok: false, message: error.message || "Could not change password." };
@@ -648,6 +531,9 @@ export function ShopProvider({ children }) {
   const deleteAccountWithPassword = async ({ password }) => {
     try {
       if (!authUser?.email) return { ok: false, message: "Please login first." };
+      if (!isSupabaseConfigured || !supabase || !authUser.id) {
+        return { ok: false, message: "Authentication service is not configured." };
+      }
 
       const trimmedPassword = password?.trim() || "";
       if (!trimmedPassword) return { ok: false, message: "Password is required to delete account." };
@@ -657,66 +543,47 @@ export function ShopProvider({ children }) {
         return { ok: false, message: "Account deletion is blocked because you have pending orders." };
       }
 
-      if (isSupabaseConfigured && supabase && authUser.id) {
-        const { data: latestOrders, error: orderError } = await withTimeout(
-          supabase
-            .from("orders")
-            .select("status")
-            .eq("user_id", authUser.id),
-          15000,
-          "Order check timed out. Please try again."
-        );
+      const { data: latestOrders, error: orderError } = await withTimeout(
+        supabase
+          .from("orders")
+          .select("status")
+          .eq("user_id", authUser.id),
+        15000,
+        "Order check timed out. Please try again."
+      );
 
-        if (orderError) {
-          return { ok: false, message: orderError.message || "Could not validate order status." };
-        }
-
-        const hasPending = (latestOrders || []).some((order) => hasBlockingOrderStatus(order.status));
-        if (hasPending) {
-          return { ok: false, message: "Account deletion is blocked because you have pending orders." };
-        }
-
-        const { error: deleteError } = await withTimeout(
-          supabase.rpc("delete_own_account", { delete_password: trimmedPassword }),
-          15000,
-          "Account deletion timed out. Please try again."
-        );
-        if (deleteError) {
-          const rpcMissing = String(deleteError.message || "").toLowerCase().includes("delete_own_account")
-            && String(deleteError.message || "").toLowerCase().includes("not found");
-
-          if (rpcMissing) {
-            return { ok: false, message: "Account deletion service is not installed yet. Please run the latest schema SQL once." };
-          }
-          return { ok: false, message: deleteError.message || "Account deletion failed." };
-        }
-
-        const { error: signOutError } = await supabase.auth.signOut();
-        if (signOutError) {
-          return { ok: false, message: signOutError.message || "Account deleted, but logout failed. Please refresh." };
-        }
-
-        setCartItems([]);
-        setWishlistItems([]);
-        setOrders([]);
-        clearAuthState();
-        return { ok: true };
+      if (orderError) {
+        return { ok: false, message: orderError.message || "Could not validate order status." };
       }
 
-      const users = JSON.parse(localStorage.getItem(USERS_STORAGE_KEY) || "[]");
-      const userIndex = users.findIndex((user) => user.email === authUser.email);
-      if (userIndex === -1) return { ok: false, message: "Account not found." };
-      if (users[userIndex].password !== trimmedPassword) return { ok: false, message: "Password is incorrect." };
+      const hasPending = (latestOrders || []).some((order) => hasBlockingOrderStatus(order.status));
+      if (hasPending) {
+        return { ok: false, message: "Account deletion is blocked because you have pending orders." };
+      }
 
-      const nextUsers = users.filter((user) => user.email !== authUser.email);
-      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(nextUsers));
+      const { error: deleteError } = await withTimeout(
+        supabase.rpc("delete_own_account", { delete_password: trimmedPassword }),
+        15000,
+        "Account deletion timed out. Please try again."
+      );
+      if (deleteError) {
+        const rpcMissing = String(deleteError.message || "").toLowerCase().includes("delete_own_account")
+          && String(deleteError.message || "").toLowerCase().includes("not found");
 
-      const ordersMap = localOrdersMap();
-      delete ordersMap[authUser.email];
-      localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(ordersMap));
+        if (rpcMissing) {
+          return { ok: false, message: "Account deletion service is not installed yet. Please run the latest schema SQL once." };
+        }
+        return { ok: false, message: deleteError.message || "Account deletion failed." };
+      }
+
+      const { error: signOutError } = await supabase.auth.signOut();
+      if (signOutError) {
+        return { ok: false, message: signOutError.message || "Account deleted, but logout failed. Please refresh." };
+      }
 
       setCartItems([]);
       setWishlistItems([]);
+      setOrders([]);
       clearAuthState();
       return { ok: true };
     } catch (error) {
@@ -744,14 +611,6 @@ export function ShopProvider({ children }) {
         setAuthError(error.message);
         return { ok: false };
       }
-    } else {
-      const users = JSON.parse(localStorage.getItem(USERS_STORAGE_KEY) || "[]");
-      const nextUsers = users.map((user) =>
-        user.email === authUser.email
-          ? { ...user, address: normalized.address, addressDetails: normalized }
-          : user
-      );
-      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(nextUsers));
     }
 
     return { ok: true };
@@ -778,15 +637,6 @@ export function ShopProvider({ children }) {
     return { requiresAuth: false, ok: true };
   };
 
-  const saveLocalOrder = (orderState) => {
-    const ordersMap = localOrdersMap();
-    const userOrders = ordersMap[authUser.email] || [];
-    const nextOrders = [orderState, ...userOrders];
-    ordersMap[authUser.email] = nextOrders;
-    localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(ordersMap));
-    setOrders(nextOrders);
-  };
-
   const saveSupabaseOrder = async (orderState) => {
     const { data, error } = await supabase.from("orders").insert({
       user_id: authUser.id,
@@ -811,11 +661,12 @@ export function ShopProvider({ children }) {
     const orderState = buildOrderState(cartItems, cartSubtotal, shippingDetails, paymentInfo, getProductById);
 
     try {
-      if (isSupabaseConfigured && supabase && authUser?.id) {
-        await saveSupabaseOrder(orderState);
-      } else {
-        saveLocalOrder(orderState);
+      if (!isSupabaseConfigured || !supabase || !authUser?.id) {
+        setCartMessage("Order service is not configured.");
+        return { requiresAuth: false, ok: false };
       }
+
+      await saveSupabaseOrder(orderState);
 
       setCartItems([]);
       await updateProfileAddressDetails(shippingDetails);

@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import MainHeader from "../components/MainHeader";
 import { useShop } from "../context/ShopContext";
@@ -6,31 +6,31 @@ import { useShop } from "../context/ShopContext";
 export default function WishlistPage() {
   const navigate = useNavigate();
   const { products, wishlistItems, removeFromWishlist, addToCart } = useShop();
+  const [feedbackId, setFeedbackId] = useState(null);
 
   const wishlistProducts = useMemo(() => {
     return products.filter((p) => wishlistItems?.includes(p.id));
   }, [products, wishlistItems]);
 
   const handleAddToCart = (product) => {
-    addToCart({
-      ...product,
-      selectedSize: "S",
-      quantity: 1,
-    });
-    alert("✅ Added to cart!");
+    const result = addToCart(product, "L");
+    if (result.ok) {
+      setFeedbackId(product.id);
+      setTimeout(() => setFeedbackId(null), 1500);
+    }
   };
 
   if (!wishlistProducts || wishlistProducts.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-[#080808] text-white">
         <MainHeader />
-        <div className="max-w-6xl mx-auto px-4 py-12">
-          <h1 className="text-3xl font-bold mb-6">Your Wishlist</h1>
-          <div className="bg-white rounded-lg shadow p-12 text-center">
-            <p className="text-gray-600 text-lg mb-6">Your wishlist is empty</p>
+        <div className="max-w-6xl mx-auto px-4 pt-28 pb-16">
+          <h1 className="text-3xl md:text-5xl font-black uppercase tracking-tight mb-6">Your Wishlist</h1>
+          <div className="border border-white/10 bg-white/[0.03] p-12 text-center">
+            <p className="text-white/70 text-lg mb-6">Your wishlist is empty</p>
             <button
               onClick={() => navigate("/")}
-              className="px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-900"
+              className="bg-white text-black px-6 py-3 uppercase tracking-[0.2em] font-bold"
             >
               Continue Shopping
             </button>
@@ -41,55 +41,51 @@ export default function WishlistPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#080808] text-white">
       <MainHeader />
-      <div className="max-w-6xl mx-auto px-4 py-12">
-        <h1 className="text-3xl font-bold mb-6">Your Wishlist</h1>
-        <p className="text-gray-600 mb-8">
+      <div className="max-w-6xl mx-auto px-4 pt-28 pb-16">
+        <h1 className="text-3xl md:text-5xl font-black uppercase tracking-tight mb-2">Your Wishlist</h1>
+        <p className="text-white/60 mb-8">
           {wishlistProducts.length} item{wishlistProducts.length !== 1 ? "s" : ""} saved
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
           {wishlistProducts.map((product) => (
             <div
               key={product.id}
-              className="bg-white rounded-lg shadow overflow-hidden hover:shadow-lg transition"
+              className="border border-white/10 bg-white/[0.03] overflow-hidden"
             >
-              <div className="aspect-square overflow-hidden bg-gray-100 cursor-pointer group">
+              <div
+                className="aspect-square overflow-hidden bg-[#1a1a1a] cursor-pointer group"
+                onClick={() => navigate(`/product/${product.slug || product.id}`)}
+              >
                 <img
                   src={product.src}
                   alt={product.title}
-                  onClick={() => navigate(`/product/${product.slug}`)}
-                  className="w-full h-full object-contain group-hover:scale-105 transition"
+                  className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
                 />
               </div>
 
               <div className="p-4">
-                <h3 className="font-bold text-lg mb-1 truncate">{product.title}</h3>
-                <p className="text-gray-600 text-sm mb-3">{product.shortInfo}</p>
+                <h3 className="font-bold text-lg uppercase tracking-wide truncate">{product.title}</h3>
+                <p className="text-white/55 text-sm mt-1 line-clamp-1">{product.shortInfo}</p>
 
-                <div className="flex gap-2 mb-3">
-                  <span className="text-xs bg-gray-100 px-2 py-1 rounded">
-                    S: ₹{product.pricing?.S || 599}
-                  </span>
-                  <span className="text-xs bg-gray-100 px-2 py-1 rounded">
-                    L: ₹{product.pricing?.L || 999}
-                  </span>
-                  <span className="text-xs bg-gray-100 px-2 py-1 rounded">
-                    XL: ₹{product.pricing?.XL || 1499}
-                  </span>
+                <div className="flex gap-2 mt-3 text-xs text-white/65">
+                  <span className="border border-white/15 px-2 py-1">S: ₹{product.pricing?.S}</span>
+                  <span className="border border-white/15 px-2 py-1">L: ₹{product.pricing?.L}</span>
+                  <span className="border border-white/15 px-2 py-1">XL: ₹{product.pricing?.XL}</span>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex gap-2 mt-4">
                   <button
                     onClick={() => handleAddToCart(product)}
-                    className="flex-1 px-3 py-2 bg-black text-white rounded-lg hover:bg-gray-900 text-sm font-medium"
+                    className="flex-1 border border-white/50 px-3 py-2 text-xs uppercase tracking-widest font-bold hover:bg-white hover:text-black transition-colors"
                   >
-                    Add to Cart
+                    {feedbackId === product.id ? "Added ✓" : "Add to Cart"}
                   </button>
                   <button
                     onClick={() => removeFromWishlist(product.id)}
-                    className="px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-medium"
+                    className="border border-rose-300/40 px-3 py-2 text-xs uppercase tracking-widest text-rose-200 hover:bg-rose-500/10 transition-colors"
                   >
                     Remove
                   </button>

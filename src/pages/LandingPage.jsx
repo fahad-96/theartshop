@@ -47,7 +47,7 @@ export default function LandingPage() {
 
   const filteredProducts = useMemo(
     () => products.filter((product) => product.title.toLowerCase().includes(searchTerm.toLowerCase())),
-    [searchTerm]
+    [searchTerm, products]
   );
 
   const scrollToSection = (id) => {
