@@ -121,12 +121,14 @@ export default function MainHeader() {
               Login
             </Link>
           )}
-          <Link
-            to="/cart"
-            className="border border-white/35 px-3 py-2 text-[10px] sm:text-xs uppercase tracking-[0.16em] sm:tracking-[0.2em] whitespace-nowrap hover:bg-white hover:text-black transition-colors"
-          >
-            Cart ({cartCount})
-          </Link>
+          {authUser && (
+            <Link
+              to="/cart"
+              className="border border-white/35 px-3 py-2 text-[10px] sm:text-xs uppercase tracking-[0.16em] sm:tracking-[0.2em] whitespace-nowrap hover:bg-white hover:text-black transition-colors"
+            >
+              Cart ({cartCount})
+            </Link>
+          )}
 
           <button
             type="button"

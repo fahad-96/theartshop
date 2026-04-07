@@ -16,7 +16,7 @@ import {
 } from "../data/products";
 
 export default function LandingPage() {
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(() => !sessionStorage.getItem("preloaderShown"));
   const [searchTerm, setSearchTerm] = useState("");
   const { products } = useShop();
 
@@ -58,7 +58,7 @@ export default function LandingPage() {
 
   return (
     <div className="bg-[#f0f0f0] text-black w-full min-h-screen font-sans selection:bg-black selection:text-white relative">
-      <AnimatePresence>{isLoading && <Preloader onComplete={() => setIsLoading(false)} />}</AnimatePresence>
+      <AnimatePresence>{isLoading && <Preloader onComplete={() => { sessionStorage.setItem("preloaderShown", "1"); setIsLoading(false); }} />}</AnimatePresence>
 
       <MainHeader />
 
@@ -108,7 +108,7 @@ export default function LandingPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-x-12 md:gap-y-40">
+        <div className="grid grid-cols-3 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4 md:gap-x-12 md:gap-y-40">
           {filteredProducts.map((product, i) => (
             <ProductCard key={product.id} product={product} index={i} />
           ))}
