@@ -249,6 +249,11 @@ export default function CartPage() {
         }),
       });
 
+      const contentType = createOrderResponse.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error("Payment server is not reachable. Please ensure VITE_API_BASE_URL is configured and the payment server is running.");
+      }
+
       const createOrderPayload = await createOrderResponse.json();
       if (!createOrderResponse.ok || !createOrderPayload?.ok) {
         throw new Error(createOrderPayload?.message || "Failed to create payment order.");

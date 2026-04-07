@@ -1,6 +1,17 @@
 [build]
   command = "npm run build"
   publish = "dist"
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/payment/order"
+  to = "/.netlify/functions/payment-order"
+  status = 200
+
+[[redirects]]
+  from = "/api/payment/verify"
+  to = "/.netlify/functions/payment-verify"
+  status = 200
 
 [[redirects]]
   from = "/*"
