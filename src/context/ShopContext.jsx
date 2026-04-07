@@ -483,6 +483,7 @@ export function ShopProvider({ children }) {
         console.error("Logout failed", error);
       }
     }
+    window.location.href = "/";
   };
 
   const changePasswordWithCurrent = async ({ currentPassword, newPassword }) => {

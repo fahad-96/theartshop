@@ -1,9 +1,12 @@
 import React from "react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
+import ScrollToTop from "./components/ScrollToTop";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import CartPage from "./pages/CartPage";
+import CheckoutPage from "./pages/CheckoutPage";
+import OrderSuccessPage from "./pages/OrderSuccessPage";
 import ProductPage from "./pages/ProductPage";
 import WishlistPage from "./pages/WishlistPage";
 import ProfilePage from "./pages/ProfilePage";
@@ -26,6 +29,8 @@ function NotFoundPage() {
 
 export default function App() {
 	return (
+		<>
+		<ScrollToTop />
 		<Routes>
 			<Route path="/" element={<LandingPage />} />
 			<Route path="/login" element={<LoginPage />} />
@@ -35,6 +40,8 @@ export default function App() {
 			<Route path="/auth/confirmed" element={<AccountActivatedPage />} />
 			<Route path="/account-deleted" element={<AccountDeletionCompletedPage />} />
 			<Route path="/cart" element={<CartPage />} />
+			<Route path="/checkout" element={<CheckoutPage />} />
+			<Route path="/order-success" element={<OrderSuccessPage />} />
 			<Route path="/product/:productKey" element={<ProductPage />} />
 			<Route path="/wishlist" element={<WishlistPage />} />
 			<Route path="/profile" element={<ProfilePage />} />
@@ -44,5 +51,6 @@ export default function App() {
 			<Route path="*" element={<NotFoundPage />} />
 			<Route path="/home" element={<Navigate to="/" replace />} />
 		</Routes>
+		</>
 	);
 }
