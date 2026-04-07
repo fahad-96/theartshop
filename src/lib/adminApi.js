@@ -284,17 +284,10 @@ export const saveProductReview = async (supabase, productId, review) => {
 // ── Customer Management ──
 
 export const fetchAdminCustomers = async (supabase, filters = {}) => {
-  let query = supabase
-    .from("profiles")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  if (filters.search?.trim()) {
-    const term = filters.search.trim();
-    query = query.or(`email.ilike.%${term}%,full_name.ilike.%${term}%,phone.ilike.%${term}%`);
-  }
-
-  const { data, error } = await query;
+  const searchTerm = filters.search?.trim() || "";
+  const { data, error } = await supabase.rpc("admin_list_customers", {
+    search_term: searchTerm,
+  });
   if (error) throw new Error(`Fetch customers failed: ${error.message}`);
   return data || [];
 };

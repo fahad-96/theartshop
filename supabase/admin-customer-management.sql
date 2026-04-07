@@ -84,7 +84,7 @@ BEGIN
 END;
 $$;
 
--- Allow admins to read all profiles
+-- Allow admins to read all profiles (policy-based fallback)
 DO $$ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_policies WHERE policyname = 'admin_read_all_profiles' AND tablename = 'profiles'
@@ -95,3 +95,29 @@ DO $$ BEGIN
       );
   END IF;
 END $$;
+
+-- RPC to list all customers (bypasses RLS via SECURITY DEFINER)
+CREATE OR REPLACE FUNCTION admin_list_customers(search_term text DEFAULT '')
+RETURNS SETOF profiles
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.admin_users
+    WHERE user_id = auth.uid() AND active = true
+  ) THEN
+    RAISE EXCEPTION 'Not authorized';
+  END IF;
+
+  IF search_term = '' THEN
+    RETURN QUERY SELECT * FROM public.profiles ORDER BY created_at DESC;
+  ELSE
+    RETURN QUERY SELECT * FROM public.profiles
+      WHERE email ILIKE '%' || search_term || '%'
+         OR full_name ILIKE '%' || search_term || '%'
+         OR phone ILIKE '%' || search_term || '%'
+      ORDER BY created_at DESC;
+  END IF;
+END;
+$$;
