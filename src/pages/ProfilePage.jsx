@@ -236,6 +236,12 @@ export default function ProfilePage() {
     persistAddressBook(nextAddresses, nextDefault);
 
     if (nextAddresses.length === 0) {
+      await updateProfileAddressDetails({
+        fullName: authUser.name || "",
+        phone: "",
+        landmark: "",
+        address: "",
+      });
       setAddressForm({ fullName: authUser.name || "", phone: "", landmark: "", address: "" });
       setIsEditingAddress(true);
       setEditingAddressIndex(-1);

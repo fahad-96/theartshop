@@ -9,6 +9,7 @@ export default function ProductPage() {
   const navigate = useNavigate();
   const { products, getProductById, handleBuy, setAuthError } = useShop();
   const [selectedSize, setSelectedSize] = useState("L");
+  const [addedMessage, setAddedMessage] = useState("");
 
   const product = useMemo(() => {
     return (
@@ -46,7 +47,8 @@ export default function ProductPage() {
 
     if (result.added) {
       setAuthError("");
-      navigate("/cart");
+      setAddedMessage("Added");
+      setTimeout(() => setAddedMessage(""), 1500);
     }
   };
 
@@ -139,6 +141,7 @@ export default function ProductPage() {
                 Back
               </button>
             </div>
+            {addedMessage && <p className="text-sm text-emerald-300">{addedMessage}</p>}
           </div>
         </div>
       </div>

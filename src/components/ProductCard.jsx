@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
 import { useShop } from "../context/ShopContext";
@@ -6,6 +6,7 @@ import { useShop } from "../context/ShopContext";
 export default function ProductCard({ product, index }) {
   const navigate = useNavigate();
   const { handleBuy, setAuthError } = useShop();
+  const [addedMessage, setAddedMessage] = useState("");
 
   const onBuy = () => {
     const result = handleBuy(product, "L");
@@ -16,7 +17,8 @@ export default function ProductCard({ product, index }) {
 
     if (result.added) {
       setAuthError("");
-      navigate("/cart");
+      setAddedMessage("Added");
+      setTimeout(() => setAddedMessage(""), 1500);
     }
   };
 
@@ -66,6 +68,7 @@ export default function ProductCard({ product, index }) {
             Add to Cart
           </button>
         </div>
+        {addedMessage && <p className="text-xs text-emerald-300">{addedMessage}</p>}
       </div>
     </motion.div>
   );

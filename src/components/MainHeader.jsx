@@ -67,8 +67,8 @@ export default function MainHeader() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  logout();
+                onClick={async () => {
+                  await logout();
                   navigate("/");
                 }}
                 className="border border-white/30 px-5 py-2 text-xs uppercase tracking-[0.2em] hover:bg-white hover:text-black"
@@ -78,30 +78,23 @@ export default function MainHeader() {
             </div>
           ) : (
             <div className="flex flex-col sm:flex-row gap-3">
-              <button
-                type="button"
-                onClick={() => navigate("/login")}
+              <Link
+                to="/login"
+                onClick={() => setIsMenuOpen(false)}
                 className="border border-white/30 px-5 py-2 text-xs uppercase tracking-[0.2em] hover:bg-white hover:text-black"
               >
                 Login
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate("/signup")}
+              </Link>
+              <Link
+                to="/signup"
+                onClick={() => setIsMenuOpen(false)}
                 className="border border-white/30 px-5 py-2 text-xs uppercase tracking-[0.2em] hover:bg-white hover:text-black"
               >
                 Sign Up
-              </button>
+              </Link>
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={() => navigate("/admin/login")}
-            className="mt-4 border border-white/20 px-5 py-2 text-xs uppercase tracking-[0.2em] text-white/65 hover:bg-white/10 hover:text-white"
-          >
-            Admin Login
-          </button>
         </div>
       )}
 
@@ -120,6 +113,14 @@ export default function MainHeader() {
         </div>
 
         <div className="flex-1 flex justify-end items-center gap-3">
+          {!authUser && (
+            <Link
+              to="/login"
+              className="hidden sm:inline-flex border border-white/35 px-4 py-2 text-xs uppercase tracking-[0.2em] hover:bg-white hover:text-black transition-colors"
+            >
+              Login
+            </Link>
+          )}
           <Link
             to="/cart"
             className="border border-white/35 px-4 py-2 text-xs uppercase tracking-[0.2em] hover:bg-white hover:text-black transition-colors"

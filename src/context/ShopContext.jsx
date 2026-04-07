@@ -579,15 +579,17 @@ export function ShopProvider({ children }) {
 
   const logout = async () => {
     if (isSupabaseConfigured && supabase) {
-      setPendingBuy(null);
-      setAuthError("");
-      await supabase.auth.signOut();
+      // Clear UI state immediately so logout feels instant even if network is slow.
+      clearAuthState();
+      try {
+        await supabase.auth.signOut();
+      } catch (error) {
+        console.error("Logout failed", error);
+      }
       return;
     }
 
-    setAuthUser(null);
-    setPendingBuy(null);
-    setAuthError("");
+    clearAuthState();
   };
 
   const changePasswordWithCurrent = async ({ currentPassword, newPassword }) => {
