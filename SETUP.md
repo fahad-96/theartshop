@@ -230,6 +230,12 @@ git push
 - Your site updates automatically in 2-3 minutes
 - Check Netlify dashboard for **Deploy Preview**
 
+### Netlify Environment Variables
+- Set the same frontend variables from `.env.example` in **Site settings → Build & deploy → Environment**.
+- Required for production: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_SUPABASE_EMAIL_REDIRECT_URL`.
+- If the API runs somewhere else, set `VITE_API_BASE_URL` too.
+- If you use Mapbox on mobile or desktop, also set `VITE_MAPBOX_TOKEN`.
+
 ### Verify in Production
 1. Visit **https://theartshops.netlify.app/**
 2. Run through testing checklist above

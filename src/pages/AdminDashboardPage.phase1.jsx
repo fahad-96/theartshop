@@ -43,7 +43,7 @@ const EMPTY_FORM = {
   priceXL: 1499,
   sortOrder: 0,
   isActive: true,
-  publishStatus: "draft",
+  publishStatus: "published",
 };
 
 export default function AdminDashboardPage() {

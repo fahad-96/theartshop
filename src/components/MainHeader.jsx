@@ -42,12 +42,12 @@ export default function MainHeader() {
   return (
     <>
       {isMenuOpen && (
-        <div className="fixed inset-0 z-40 bg-black text-white flex flex-col items-center justify-center space-y-8 px-4">
+        <div className="fixed inset-0 z-40 bg-black text-white flex flex-col items-center justify-center space-y-6 px-4">
           {["home", "shop", "about", "contact"].map((id) => (
             <button
               key={id}
               type="button"
-              className="text-4xl font-bold uppercase tracking-widest hover:text-gray-400 transition-colors"
+              className="text-2xl sm:text-4xl font-bold uppercase tracking-widest hover:text-gray-400 transition-colors"
               onClick={() => handleSectionNavigation(id)}
             >
               {id}
@@ -112,18 +112,18 @@ export default function MainHeader() {
           {/* Intentionally left open for balance in nav layout */}
         </div>
 
-        <div className="flex-1 flex justify-end items-center gap-3">
+        <div className="flex-1 flex justify-end items-center gap-2 sm:gap-3">
           {!authUser && (
             <Link
               to="/login"
-              className="hidden sm:inline-flex border border-white/35 px-4 py-2 text-xs uppercase tracking-[0.2em] hover:bg-white hover:text-black transition-colors"
+              className="inline-flex border border-white/35 px-3 py-2 text-[10px] sm:text-xs uppercase tracking-[0.16em] sm:tracking-[0.2em] whitespace-nowrap hover:bg-white hover:text-black transition-colors"
             >
               Login
             </Link>
           )}
           <Link
             to="/cart"
-            className="border border-white/35 px-4 py-2 text-xs uppercase tracking-[0.2em] hover:bg-white hover:text-black transition-colors"
+            className="border border-white/35 px-3 py-2 text-[10px] sm:text-xs uppercase tracking-[0.16em] sm:tracking-[0.2em] whitespace-nowrap hover:bg-white hover:text-black transition-colors"
           >
             Cart ({cartCount})
           </Link>

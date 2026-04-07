@@ -62,7 +62,7 @@ export default function LandingPage() {
 
       <MainHeader />
 
-      <section id="home" className="h-screen w-full flex flex-col justify-center items-center relative overflow-hidden bg-black">
+      <section id="home" className="min-h-[100svh] w-full flex flex-col justify-center items-center relative overflow-hidden bg-black pt-20 md:pt-0">
         <video autoPlay muted loop playsInline className="absolute inset-0 w-full h-full object-cover opacity-90">
           <source src={HERO_VIDEO_MOBILE_SRC} media="(max-width: 768px)" type="video/mp4" />
           <source src={HERO_VIDEO_SRC} type="video/mp4" />
@@ -70,16 +70,16 @@ export default function LandingPage() {
         <div className="absolute inset-0 bg-black/35" />
 
         <motion.div style={{ y: yHeroText }} className="z-10 text-center pointer-events-none uppercase">
-          <h1 data-splitting className="text-[5rem] sm:text-[7rem] md:text-[9rem] lg:text-[11rem] font-black leading-none tracking-tighter text-white/0">
+          <h1 data-splitting className="text-[16vw] sm:text-[7rem] md:text-[9rem] lg:text-[11rem] font-black leading-none tracking-tighter text-white/0">
             SHOP
             <br />
             THE ART
           </h1>
         </motion.div>
 
-        <div className="absolute bottom-[-10%] whitespace-nowrap overflow-hidden w-full flex opacity-10 text-white">
+        <div className="absolute bottom-2 md:bottom-[-10%] whitespace-nowrap overflow-hidden w-full flex opacity-10 text-white">
           <motion.div
-            className="text-[12rem] font-black tracking-tight inline-block border-text-black"
+            className="text-[5rem] sm:text-[8rem] md:text-[12rem] font-black tracking-tight inline-block border-text-black"
             animate={{ x: ["0%", "-50%"] }}
             transition={{ repeat: Infinity, ease: "linear", duration: 15 }}
           >
@@ -108,7 +108,7 @@ export default function LandingPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-x-12 md:gap-y-40">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-x-12 md:gap-y-40">
           {filteredProducts.map((product, i) => (
             <ProductCard key={product.id} product={product} index={i} />
           ))}
@@ -116,7 +116,7 @@ export default function LandingPage() {
         <div className="absolute bottom-0 left-1/2 -translate-x-1/2 h-28 w-px bg-gradient-to-b from-white/0 to-white/35 pointer-events-none" />
       </section>
 
-      <section className="h-screen w-full flex flex-col justify-center items-center bg-black relative py-20 overflow-hidden">
+      <section className="min-h-[100svh] w-full flex flex-col justify-center items-center bg-black relative py-20 overflow-hidden">
         <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-white/15 pointer-events-none" />
         <div className="w-full max-w-4xl h-[80vh] relative">
           <video src={SECTION_CONNECTOR_VIDEO_SRC} autoPlay muted loop playsInline className="w-full h-full object-contain" />
@@ -143,9 +143,9 @@ export default function LandingPage() {
 
       <footer id="contact" className="bg-black text-white flex flex-col p-4 md:p-12 relative overflow-hidden">
         <div className="w-full flex flex-col items-center justify-center text-center px-6 z-10 relative pt-24 md:pt-28">
-          <h1 className="text-[12vw] font-black leading-[0.8] tracking-tighter uppercase whitespace-nowrap">LET'S CREATE</h1>
-          <h1 className="text-[12vw] font-black leading-[0.8] tracking-tighter uppercase whitespace-nowrap border-text-white">extra-ordinary</h1>
-          <h1 className="text-[12vw] font-black leading-[0.8] tracking-tighter uppercase whitespace-nowrap">TOGETHER!</h1>
+          <h1 className="text-[16vw] sm:text-[12vw] font-black leading-[0.8] tracking-tighter uppercase whitespace-nowrap">LET'S CREATE</h1>
+          <h1 className="text-[16vw] sm:text-[12vw] font-black leading-[0.8] tracking-tighter uppercase whitespace-nowrap border-text-white">extra-ordinary</h1>
+          <h1 className="text-[16vw] sm:text-[12vw] font-black leading-[0.8] tracking-tighter uppercase whitespace-nowrap">TOGETHER!</h1>
         </div>
         <div className="mt-20 md:mt-24 border-t border-white/15 pt-10 flex flex-col gap-10 z-10 relative">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-10">
