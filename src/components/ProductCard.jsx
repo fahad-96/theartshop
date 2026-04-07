@@ -1,15 +1,39 @@
-import React from "react";
-import { motion } from "framer-motion";
+import React, { useState, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
 import { useShop } from "../context/ShopContext";
+import { sizeDimensions } from "../data/products";
 
 export default function ProductCard({ product, index }) {
   const navigate = useNavigate();
-  const { handleBuy, setAuthError, cartItems } = useShop();
+  const { handleBuy, setAuthError, cartItems, authUser } = useShop();
   const inCart = cartItems.some((item) => item.productId === product.id);
+  const [showSizePicker, setShowSizePicker] = useState(false);
+  const pickerRef = useRef(null);
 
-  const onBuy = () => {
-    const result = handleBuy(product, "L");
+  useEffect(() => {
+    const handler = (e) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target)) {
+        setShowSizePicker(false);
+      }
+    };
+    if (showSizePicker) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showSizePicker]);
+
+  const onAddClick = () => {
+    if (!authUser) {
+      const result = handleBuy(product, "L");
+      if (result.requiresAuth) navigate("/login");
+      return;
+    }
+    if (inCart) return;
+    setShowSizePicker(true);
+  };
+
+  const onSizeSelect = (size) => {
+    setShowSizePicker(false);
+    const result = handleBuy(product, size);
     if (result.requiresAuth) {
       navigate("/login");
       return;
@@ -18,6 +42,8 @@ export default function ProductCard({ product, index }) {
       setAuthError("");
     }
   };
+
+  const sizes = Object.entries(product.pricing);
 
   return (
     <motion.div
@@ -65,30 +91,18 @@ export default function ProductCard({ product, index }) {
           {product.shortInfo}
         </p>
 
-        {/* Mobile: single tap-to-view row */}
-        <div className="flex gap-1 mt-1.5 sm:hidden">
+        {/* Mobile: view only — size selection on product page */}
+        <div className="flex mt-1.5 sm:hidden">
           <Link
             to={`/product/${product.slug || product.id}`}
-            className="flex-1 border border-white/30 text-center text-white py-1 text-[7px] uppercase tracking-[0.08em] font-bold"
+            className="flex-1 border border-white/30 text-center text-white py-1 text-[7px] uppercase tracking-[0.08em] font-bold active:bg-white active:text-black"
           >
             View
           </Link>
-          <button
-            type="button"
-            onClick={onBuy}
-            disabled={inCart}
-            className={`flex-1 border text-center py-1 text-[7px] uppercase tracking-[0.08em] font-bold ${
-              inCart
-                ? "border-emerald-400/40 text-emerald-400 cursor-default"
-                : "border-white/30 text-white active:bg-white active:text-black"
-            }`}
-          >
-            {inCart ? "Added" : "Add"}
-          </button>
         </div>
 
         {/* Tablet+: full buttons */}
-        <div className="hidden sm:flex items-center gap-2 mt-3">
+        <div className="hidden sm:flex items-center gap-2 mt-3 relative">
           <Link
             to={`/product/${product.slug || product.id}`}
             className="border border-white/40 text-white px-4 py-1.5 text-[10px] md:text-xs uppercase tracking-[0.15em] font-bold hover:bg-white hover:text-black transition-colors"
@@ -97,7 +111,7 @@ export default function ProductCard({ product, index }) {
           </Link>
           <button
             type="button"
-            onClick={onBuy}
+            onClick={onAddClick}
             disabled={inCart}
             className={`border px-4 py-1.5 text-[10px] md:text-xs uppercase tracking-[0.15em] font-bold transition-colors ${
               inCart
@@ -109,6 +123,64 @@ export default function ProductCard({ product, index }) {
           </button>
         </div>
       </div>
+
+      {/* Size picker overlay */}
+      <AnimatePresence>
+        {showSizePicker && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="absolute inset-0 z-30 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          >
+            <motion.div
+              ref={pickerRef}
+              initial={{ scale: 0.85, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.85, opacity: 0 }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+              className="bg-[#111] border border-white/15 p-3 sm:p-5 w-[85%] max-w-[260px]"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[8px] sm:text-[10px] uppercase tracking-[0.25em] text-white/50 font-bold">
+                  Pick Size
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowSizePicker(false)}
+                  className="text-white/40 hover:text-white text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {sizes.map(([size, price], i) => (
+                  <motion.button
+                    key={size}
+                    type="button"
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.06 }}
+                    onClick={() => onSizeSelect(size)}
+                    className="flex items-center justify-between border border-white/10 hover:border-white/40 hover:bg-white/5 px-3 py-2 sm:py-2.5 transition-all duration-200 group/size"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-white group-hover/size:text-white">
+                        {size}
+                      </span>
+                      <span className="text-[8px] sm:text-[10px] text-white/30 tracking-wider">
+                        {sizeDimensions[size]}
+                      </span>
+                    </div>
+                    <span className="text-[10px] sm:text-sm font-bold text-white/80">₹{price}</span>
+                  </motion.button>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

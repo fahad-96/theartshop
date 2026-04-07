@@ -123,69 +123,237 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="about" className="min-h-screen w-full flex items-center justify-center px-4 md:px-12 py-32 bg-white text-black relative overflow-hidden">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 h-28 w-px bg-gradient-to-b from-black/35 to-black/0 pointer-events-none" />
-        <div className="w-full max-w-5xl mx-auto flex flex-col gap-24 text-center">
-          <div className="group">
-            <h2 className="text-4xl md:text-7xl font-black tracking-tighter hover:text-gray-400 transition-colors duration-500">01 PRECISION LASER CUT</h2>
-            <p className="mt-4 text-sm font-bold uppercase tracking-[0.3em] opacity-50 group-hover:opacity-100 transition-opacity max-w-2xl mx-auto">Our state-of-the-art laser cutting technology ensures every piece has flawless edges and intricate details, bringing your vision to life with unparalleled precision.</p>
-          </div>
-          <div className="group">
-            <h2 className="text-4xl md:text-7xl font-black tracking-tighter hover:text-gray-400 transition-colors duration-500">02 PREMIUM MATERIAL</h2>
-            <p className="mt-4 text-sm font-bold uppercase tracking-[0.3em] opacity-50 group-hover:opacity-100 transition-opacity max-w-2xl mx-auto">We use only the finest, sustainably sourced wood and metal. Our commitment to quality materials means your artwork is not only beautiful but also durable and long-lasting.</p>
-          </div>
-          <div className="group">
-            <h2 className="text-4xl md:text-7xl font-black tracking-tighter hover:text-gray-400 transition-colors duration-500">03 ARTISAN FINISH</h2>
-            <p className="mt-4 text-sm font-bold uppercase tracking-[0.3em] opacity-50 group-hover:opacity-100 transition-opacity max-w-2xl mx-auto">Each piece is hand-finished by our skilled artisans. This personal touch adds a unique character and ensures that your artwork is a true masterpiece.</p>
+      <section id="about" className="w-full bg-[#060606] text-white relative overflow-hidden">
+        {/* Top accent line */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 h-32 w-px bg-gradient-to-b from-white/25 to-transparent pointer-events-none" />
+
+        {/* Section header */}
+        <div className="pt-32 md:pt-44 pb-16 md:pb-24 px-6 text-center">
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8 }}
+            className="text-[10px] uppercase tracking-[0.5em] text-white/40 font-semibold mb-6"
+          >
+            Why Choose Us
+          </motion.p>
+          <motion.h2
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8, delay: 0.1 }}
+            className="text-4xl md:text-7xl lg:text-8xl font-black tracking-tighter uppercase"
+          >
+            Craft Beyond
+            <br />
+            <span className="text-transparent" style={{ WebkitTextStroke: "1.5px rgba(255,255,255,0.4)" }}>
+              Ordinary
+            </span>
+          </motion.h2>
+        </div>
+
+        {/* Feature cards */}
+        <div className="px-4 md:px-12 lg:px-20 pb-32 md:pb-44">
+          <div className="grid md:grid-cols-3 gap-px bg-white/[0.06]">
+            {[
+              {
+                num: "01",
+                title: "Precision\nLaser Cut",
+                desc: "State-of-the-art laser technology ensures flawless edges and intricate details, bringing your vision to life with unparalleled precision.",
+                icon: (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="w-8 h-8 md:w-10 md:h-10">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                  </svg>
+                ),
+              },
+              {
+                num: "02",
+                title: "Premium\nMaterial",
+                desc: "Only the finest, sustainably sourced wood and metal. Beautiful, durable, and long-lasting artwork you can feel proud of.",
+                icon: (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="w-8 h-8 md:w-10 md:h-10">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                  </svg>
+                ),
+              },
+              {
+                num: "03",
+                title: "Artisan\nFinish",
+                desc: "Each piece is hand-finished by skilled artisans. A personal touch adding unique character to every true masterpiece.",
+                icon: (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="w-8 h-8 md:w-10 md:h-10">
+                    <path d="M12 19l7-7 3 3-7 7-3-3z" /><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" /><path d="M2 2l7.586 7.586" /><circle cx="11" cy="11" r="2" />
+                  </svg>
+                ),
+              },
+            ].map((item, i) => (
+              <motion.div
+                key={item.num}
+                initial={{ opacity: 0, y: 50 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-80px" }}
+                transition={{ duration: 0.8, delay: i * 0.15, ease: [0.22, 1, 0.36, 1] }}
+                className="bg-[#0a0a0a] p-8 md:p-10 lg:p-14 group hover:bg-[#111] transition-colors duration-700 relative"
+              >
+                {/* Hover glow */}
+                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none bg-gradient-to-b from-white/[0.03] to-transparent" />
+
+                <div className="relative z-10">
+                  <div className="flex items-start justify-between mb-8 md:mb-12">
+                    <span className="text-[10px] text-white/20 font-mono tracking-wider">{item.num}</span>
+                    <span className="text-white/15 group-hover:text-white/40 transition-colors duration-700">
+                      {item.icon}
+                    </span>
+                  </div>
+                  <h3 className="text-2xl md:text-3xl lg:text-4xl font-black tracking-tight uppercase leading-[1.05] whitespace-pre-line group-hover:text-white transition-colors duration-500">
+                    {item.title}
+                  </h3>
+                  <div className="w-8 h-px bg-white/15 group-hover:w-16 group-hover:bg-white/40 transition-all duration-700 mt-6 mb-5" />
+                  <p className="text-xs md:text-sm text-white/35 leading-relaxed group-hover:text-white/60 transition-colors duration-500 max-w-sm">
+                    {item.desc}
+                  </p>
+                </div>
+              </motion.div>
+            ))}
           </div>
         </div>
       </section>
 
-      <footer id="contact" className="bg-black text-white flex flex-col p-4 md:p-12 relative overflow-hidden">
-        <div className="w-full flex flex-col items-center justify-center text-center px-6 z-10 relative pt-24 md:pt-28">
-          <h1 className="text-[16vw] sm:text-[12vw] font-black leading-[0.8] tracking-tighter uppercase whitespace-nowrap">LET'S CREATE</h1>
-          <h1 className="text-[16vw] sm:text-[12vw] font-black leading-[0.8] tracking-tighter uppercase whitespace-nowrap border-text-white">extra-ordinary</h1>
-          <h1 className="text-[16vw] sm:text-[12vw] font-black leading-[0.8] tracking-tighter uppercase whitespace-nowrap">TOGETHER!</h1>
+      <footer id="contact" className="bg-[#030303] text-white relative overflow-hidden">
+        {/* Divider line */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 h-24 w-px bg-gradient-to-b from-white/20 to-transparent pointer-events-none" />
+
+        {/* CTA Hero */}
+        <div className="relative px-6 pt-32 md:pt-44 pb-20 md:pb-28">
+          {/* Background glow */}
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-white/[0.02] rounded-full blur-[120px]" />
+          </div>
+
+          <div className="relative z-10 text-center max-w-5xl mx-auto">
+            <motion.p
+              initial={{ opacity: 0, y: 15 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+              className="text-[10px] uppercase tracking-[0.5em] text-white/35 font-semibold mb-8"
+            >
+              Get in Touch
+            </motion.p>
+            <motion.h2
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.8, delay: 0.1 }}
+              className="text-[12vw] sm:text-[8vw] md:text-[6vw] font-black leading-[0.85] tracking-tighter uppercase"
+            >
+              Let's Create
+              <br />
+              <span className="text-transparent" style={{ WebkitTextStroke: "1.5px rgba(255,255,255,0.3)" }}>
+                Something
+              </span>
+              <br />
+              Extraordinary
+            </motion.h2>
+            <motion.p
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+              className="mt-8 text-sm md:text-base text-white/40 max-w-lg mx-auto leading-relaxed"
+            >
+              Want a piece that feels custom-built for your space? Message us and we'll help you pick the right artwork, size, and finish.
+            </motion.p>
+          </div>
         </div>
-        <div className="mt-20 md:mt-24 border-t border-white/15 pt-10 flex flex-col gap-10 z-10 relative">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-10">
-            <div className="max-w-xl">
-              <p className="text-xs uppercase tracking-[0.28em] text-white/60 font-semibold">Contact</p>
-              <p className="mt-4 text-white/85 leading-relaxed">Want a piece that feels custom-built for your space? Message us and we will help you pick the right artwork, size, and finish.</p>
-              <p className="mt-4 text-white/65 text-sm">Address: Downtown Srinagar, Jammu and Kashmir, India</p>
-            </div>
-            <form className="flex w-full md:w-[420px]" onSubmit={(e) => e.preventDefault()}>
-              <input type="email" placeholder="ENTER YOUR EMAIL" className="bg-transparent border-b border-white/25 outline-none w-full pb-3 placeholder-white/35 focus:border-white transition-colors text-sm" />
-            </form>
+
+        {/* Info grid */}
+        <div className="border-t border-white/[0.06] mx-6 md:mx-12 lg:mx-20">
+          <div className="grid md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-white/[0.06]">
+            {/* Address */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+              className="py-10 md:py-14 md:pr-10"
+            >
+              <p className="text-[9px] uppercase tracking-[0.4em] text-white/25 font-semibold mb-4">Location</p>
+              <p className="text-sm text-white/60 leading-relaxed">
+                Downtown Srinagar
+                <br />
+                Jammu & Kashmir, India
+              </p>
+            </motion.div>
+
+            {/* Connect */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6, delay: 0.1 }}
+              className="py-10 md:py-14 md:px-10"
+            >
+              <p className="text-[9px] uppercase tracking-[0.4em] text-white/25 font-semibold mb-4">Connect</p>
+              <a
+                href={INSTAGRAM_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm text-white/60 hover:text-white transition-colors duration-300 group/ig"
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 opacity-50 group-hover/ig:opacity-100 transition-opacity">
+                  <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" />
+                </svg>
+                Instagram
+              </a>
+            </motion.div>
+
+            {/* Navigation */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              className="py-10 md:py-14 md:pl-10"
+            >
+              <p className="text-[9px] uppercase tracking-[0.4em] text-white/25 font-semibold mb-4">Navigate</p>
+              <nav className="flex flex-col gap-2">
+                {["home", "shop", "about", "contact"].map((id) => (
+                  <a
+                    key={id}
+                    href={`#${id}`}
+                    className="text-sm text-white/40 hover:text-white/80 transition-colors duration-300 uppercase tracking-[0.15em] font-medium w-fit"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      scrollToSection(id);
+                    }}
+                  >
+                    {id}
+                  </a>
+                ))}
+              </nav>
+            </motion.div>
           </div>
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-10 text-xs uppercase tracking-[0.22em] font-semibold">
-            <nav className="flex flex-wrap gap-x-8 gap-y-4 text-white/70">
-              {["home", "shop", "about", "contact"].map((id) => (
-                <a
-                  key={id}
-                  href={`#${id}`}
-                  className="hover:text-white transition-colors"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    scrollToSection(id);
-                  }}
-                >
-                  {id}
-                </a>
-              ))}
-            </nav>
-            <div className="text-white/70 text-xs uppercase tracking-[0.22em] font-semibold">
-              Connect via{" "}
-              <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer" className="text-white hover:underline transition-colors normal-case tracking-normal">Instagram</a>
-            </div>
-          </div>
-          <div className="w-full pt-8 mt-8 border-t border-white/10 text-center text-sm text-white/55" style={{ fontFamily: "cursive" }}>
-            Made with <span className="text-white">♥</span> by{" "}
-            <a href="https://fahad-yousuf.netlify.app/" target="_blank" rel="noopener noreferrer" className="underline hover:text-white transition-colors">
+        </div>
+
+        {/* Bottom bar */}
+        <div className="border-t border-white/[0.06] mx-6 md:mx-12 lg:mx-20 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p className="text-[10px] text-white/25 uppercase tracking-[0.2em]">
+            © {new Date().getFullYear()} The Art Shop
+          </p>
+          <p className="text-xs text-white/30" style={{ fontFamily: "cursive" }}>
+            Made with <span className="text-white/60">♥</span> by{" "}
+            <a
+              href="https://fahad-yousuf.netlify.app/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-white/60 transition-colors"
+            >
               Fahad Yousuf
             </a>{" "}
             in Srinagar
-          </div>
+          </p>
         </div>
       </footer>
     </div>
