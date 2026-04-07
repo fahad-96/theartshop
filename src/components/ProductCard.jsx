@@ -5,8 +5,9 @@ import { useShop } from "../context/ShopContext";
 
 export default function ProductCard({ product, index }) {
   const navigate = useNavigate();
-  const { handleBuy, setAuthError } = useShop();
+  const { handleBuy, setAuthError, cartItems } = useShop();
   const [addedMessage, setAddedMessage] = useState("");
+  const inCart = cartItems.some((item) => item.id === product.id);
 
   const onBuy = () => {
     const result = handleBuy(product, "L");
@@ -63,9 +64,13 @@ export default function ProductCard({ product, index }) {
           <button
             type="button"
             onClick={onBuy}
-            className="border border-white/50 text-white px-2.5 md:px-4 py-1 text-[9px] md:text-xs uppercase tracking-[0.1em] md:tracking-widest font-bold hover:bg-white hover:text-black transition-colors"
+            className={`border px-2.5 md:px-4 py-1 text-[9px] md:text-xs uppercase tracking-[0.1em] md:tracking-widest font-bold transition-colors ${
+              inCart
+                ? "border-emerald-400/60 text-emerald-300 cursor-default"
+                : "border-white/50 text-white hover:bg-white hover:text-black"
+            }`}
           >
-            Add to Cart
+            {inCart ? "In Cart" : "Add to Cart"}
           </button>
         </div>
         {addedMessage && <p className="text-xs text-emerald-300">{addedMessage}</p>}
