@@ -1,0 +1,312 @@
+export const isAdminUser = async (supabase) => {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+
+  const user = sessionData.session?.user || null;
+  if (!user) return false;
+
+  const { data, error } = await supabase.rpc("is_admin_user");
+  if (error) throw error;
+
+  return Boolean(data);
+};
+
+export const uploadProductImage = async (supabase, file, productId) => {
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${productId}-${Date.now()}.${fileExt}`;
+  const objectPath = `products/${fileName}`;
+  
+  const { data, error } = await supabase.storage
+    .from('product-images')
+    .upload(objectPath, file, { upsert: false });
+
+  if (error) {
+    const rawMessage = String(error.message || "").toLowerCase();
+    if (rawMessage.includes("row-level security")) {
+      throw new Error("Image upload failed: storage permission is blocked. Run the latest storage policies in schema.sql and confirm your user is in admin_users.");
+    }
+    throw new Error(`Image upload failed: ${error.message}`);
+  }
+  
+  const resolvedPath = data?.path || objectPath;
+  const { data: { publicUrl } } = supabase.storage
+    .from('product-images')
+    .getPublicUrl(resolvedPath);
+  
+  return publicUrl;
+};
+
+export const fetchAdminOrders = async (supabase, filters = {}) => {
+  let query = supabase
+    .from("orders")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (filters.status && filters.status !== "all") {
+    query = query.eq("status", filters.status);
+  }
+
+  if (filters.dateFrom) {
+    query = query.gte("created_at", new Date(filters.dateFrom).toISOString());
+  }
+
+  if (filters.dateTo) {
+    const end = new Date(filters.dateTo);
+    end.setHours(23, 59, 59, 999);
+    query = query.lte("created_at", end.toISOString());
+  }
+
+  if (filters.search?.trim()) {
+    const term = filters.search.trim();
+    query = query.or(`order_ref.ilike.%${term}%,id.ilike.%${term}%`);
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw error;
+  return data || [];
+};
+
+export const fetchAdminProducts = async (supabase, filters = {}) => {
+  let query = supabase
+    .from("products")
+    .select("*")
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (filters.status && filters.status !== "all") {
+    if (filters.status === "active") query = query.eq("is_active", true);
+    if (filters.status === "inactive") query = query.eq("is_active", false);
+    if (filters.status === "draft") query = query.eq("publish_status", "draft");
+    if (filters.status === "published") query = query.eq("publish_status", "published");
+  }
+
+  if (filters.search?.trim()) {
+    const term = filters.search.trim();
+    query = query.or(`title.ilike.%${term}%,slug.ilike.%${term}%,category.ilike.%${term}%`);
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw error;
+  return data || [];
+};
+
+export const saveAdminProduct = async (supabase, payload) => {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+
+  const user = sessionData.session?.user || null;
+  if (!user) throw new Error("Admin session not found.");
+
+  const conflictKey = payload.id ? "id" : "slug";
+  const basePayload = {
+    ...payload,
+    created_by: payload.created_by || user.id,
+    updated_by: user.id,
+  };
+
+  const legacyPayload = { ...basePayload };
+  delete legacyPayload.image_gallery;
+  delete legacyPayload.publish_status;
+
+  const isSchemaCacheColumnError = (errorMessage) => {
+    const text = String(errorMessage || "").toLowerCase();
+    return (
+      text.includes("schema cache") ||
+      text.includes("could not find the 'publish_status' column") ||
+      text.includes("could not find the 'image_gallery' column") ||
+      text.includes("publish_status") ||
+      text.includes("image_gallery")
+    );
+  };
+
+  const { data, error } = await supabase
+    .from("products")
+    .upsert(basePayload, { onConflict: conflictKey })
+    .select("*")
+    .single();
+
+  if (error) {
+    const errorMessage = String(error.message || "");
+    if (!isSchemaCacheColumnError(errorMessage)) {
+      throw error;
+    }
+
+    const retry = await supabase
+      .from("products")
+      .upsert(legacyPayload, { onConflict: conflictKey })
+      .select("*")
+      .single();
+
+    if (retry.error) throw retry.error;
+    return retry.data;
+  }
+  return data;
+};
+
+export const deleteAdminProduct = async (supabase, productId) => {
+  const { error } = await supabase
+    .from("products")
+    .delete()
+    .eq("id", productId);
+
+  if (error) throw error;
+  return true;
+};
+
+export const bulkSetProductsActive = async (supabase, productIds, isActive) => {
+  if (!Array.isArray(productIds) || !productIds.length) return [];
+  const { data, error } = await supabase
+    .from("products")
+    .update({ is_active: isActive })
+    .in("id", productIds)
+    .select("id");
+
+  if (error) throw error;
+  return data || [];
+};
+
+export const saveInventory = async (supabase, productId, size, stockCount) => {
+  const { data, error } = await supabase
+    .from('inventory_variants')
+    .upsert(
+      {
+        product_id: productId,
+        size,
+        stock_count: stockCount,
+      },
+      { onConflict: 'product_id,size' }
+    )
+    .select();
+
+  if (error) throw new Error(`Save inventory failed: ${error.message}`);
+  return data?.[0] || null;
+};
+
+export const fetchProductInventory = async (supabase, productId) => {
+  const { data, error } = await supabase
+    .from('inventory_variants')
+    .select('*')
+    .eq('product_id', productId);
+
+  if (error) throw new Error(`Fetch inventory failed: ${error.message}`);
+  return data || [];
+};
+
+export const updateAdminOrderStatus = async (supabase, orderId, status) => {
+  const { data, error } = await supabase
+    .from("orders")
+    .update({ status })
+    .eq("id", orderId)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const fetchProductReviews = async (supabase, productId) => {
+  const { data, error } = await supabase
+    .from('customer_reviews')
+    .select('*')
+    .eq('product_id', productId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(`Fetch reviews failed: ${error.message}`);
+  return data || [];
+};
+
+export const fetchAdminReviews = async (supabase, filters = {}) => {
+  let query = supabase
+    .from("customer_reviews")
+    .select("*, products(title, slug)")
+    .order("created_at", { ascending: false });
+
+  if (filters.status && filters.status !== "all") {
+    query = query.eq("review_status", filters.status);
+  }
+
+  if (filters.productId && filters.productId !== "all") {
+    query = query.eq("product_id", filters.productId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(`Fetch admin reviews failed: ${error.message}`);
+  return data || [];
+};
+
+export const updateReviewStatus = async (supabase, reviewId, reviewStatus) => {
+  const { data, error } = await supabase
+    .from("customer_reviews")
+    .update({ review_status: reviewStatus })
+    .eq("id", reviewId)
+    .select("*")
+    .single();
+
+  if (error) throw new Error(`Update review failed: ${error.message}`);
+  return data;
+};
+
+export const deleteReview = async (supabase, reviewId) => {
+  const { error } = await supabase
+    .from("customer_reviews")
+    .delete()
+    .eq("id", reviewId);
+
+  if (error) throw new Error(`Delete review failed: ${error.message}`);
+  return true;
+};
+
+export const saveProductReview = async (supabase, productId, review) => {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+
+  const user = sessionData.session?.user || null;
+  if (!user) throw new Error('User not authenticated');
+
+  const { data, error } = await supabase
+    .from('customer_reviews')
+    .upsert(
+      {
+        product_id: productId,
+        user_id: user.id,
+        ...review,
+      },
+      { onConflict: 'product_id,user_id' }
+    )
+    .select();
+
+  if (error) throw new Error(`Save review failed: ${error.message}`);
+  return data?.[0] || null;
+};
+
+export const applyCoupon = async (supabase, couponCode, cartTotal) => {
+  const { data, error } = await supabase
+    .from('coupons')
+    .select('*')
+    .eq('code', couponCode)
+    .single();
+
+  if (error || !data) throw new Error('Coupon not found or invalid');
+  
+  if (!data.active) throw new Error('Coupon is inactive');
+  if (data.max_uses && data.current_uses >= data.max_uses) throw new Error('Coupon limit reached');
+  if (cartTotal < data.minimum_purchase) {
+    throw new Error(`Minimum purchase of ₹${data.minimum_purchase} required`);
+  }
+
+  let discount = 0;
+  if (data.discount_type === 'percentage') {
+    discount = (cartTotal * data.discount_value) / 100;
+  } else {
+    discount = data.discount_value;
+  }
+
+  return {
+    code: data.code,
+    discount: Math.min(discount, cartTotal),
+    discountType: data.discount_type,
+    discountValue: data.discount_value,
+  };
+};
