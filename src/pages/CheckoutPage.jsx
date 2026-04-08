@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import MainHeader from "../components/MainHeader";
@@ -10,6 +10,8 @@ const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
 const ADDRESS_BOOK_STORAGE_KEY_PREFIX = "tas-address-book";
 const ADDRESS_SYNC_TIMEOUT_MS = 6000;
 const PAYMENT_API_TIMEOUT_MS = 15000;
+const FINALIZE_TIMEOUT_MS = 25000;
+const PENDING_PAYMENT_KEY = "tas-pending-payment";
 
 const withTimeout = (promise, timeoutMs, timeoutMessage) => {
   let timeoutId;
@@ -57,12 +59,68 @@ export default function CheckoutPage() {
   const [savingAddress, setSavingAddress] = useState(false);
   const [addressForm, setAddressForm] = useState({ fullName: "", phone: "", landmark: "", address: "" });
   const [continuing, setContinuing] = useState(false);
+  const payStartedAt = useRef(null);
 
   const {
     authUser, authReady, cartItems, cartSubtotal, getProductById,
     shippingDetails, validateCheckoutReadiness, finalizePaidOrder,
     updateProfileAddressDetails, setCartMessage,
   } = useShop();
+
+  // Recover from a stuck payment state when the user returns to the tab
+  // (common on mobile UPI flows where the browser suspends the page)
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      if (!isPaying || !payStartedAt.current) return;
+      const elapsed = Date.now() - payStartedAt.current;
+      // If we've been in the paying state for over 2 minutes, the handler likely never fired
+      if (elapsed > 120_000) {
+        setIsPaying(false);
+        setPaymentPhase("");
+        setStep("review");
+        setMessage("Payment session expired. If you were charged, your order will be confirmed automatically — please check your email or contact support.");
+        payStartedAt.current = null;
+        try { sessionStorage.removeItem(PENDING_PAYMENT_KEY); } catch {}
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [isPaying]);
+
+  // On mount, detect if we have a pending payment from a killed/reloaded page
+  useEffect(() => {
+    try {
+      const pending = sessionStorage.getItem(PENDING_PAYMENT_KEY);
+      if (pending) {
+        const { orderId, paymentId, timestamp } = JSON.parse(pending);
+        const age = Date.now() - timestamp;
+        sessionStorage.removeItem(PENDING_PAYMENT_KEY);
+        if (orderId && paymentId && age < 300_000) {
+          // The page was killed mid-payment but payment succeeded — try to finalize
+          setStep("payment");
+          setIsPaying(true);
+          setPaymentPhase("finalizing");
+          withTimeout(
+            finalizePaidOrder({ provider: "razorpay", status: "paid", razorpayOrderId: orderId, razorpayPaymentId: paymentId }),
+            FINALIZE_TIMEOUT_MS,
+            "Order finalization timed out."
+          ).then((fin) => {
+            if (fin?.ok) { navigate("/order-success", { replace: true }); return; }
+            setMessage(fin?.message || "Payment was successful, but order saving failed. Please contact support.");
+            setStep("review");
+          }).catch((err) => {
+            setMessage(err?.message || "Could not finalize the order. If you were charged, please contact support.");
+            setStep("review");
+          }).finally(() => { setIsPaying(false); setPaymentPhase(""); });
+          return;
+        }
+        if (orderId && age < 300_000) {
+          setMessage("A previous payment may have been interrupted. If you were charged, please contact support with order ID: " + orderId);
+        }
+      }
+    } catch {}
+  }, []);
 
   useEffect(() => {
     if (authReady && !authUser) navigate("/login", { replace: true });
@@ -149,6 +207,7 @@ export default function CheckoutPage() {
     setIsPaying(true);
     setStep("payment");
     setPaymentPhase("connecting");
+    payStartedAt.current = Date.now();
 
     try {
       const sdkReady = await loadRazorpaySdk();
@@ -156,6 +215,7 @@ export default function CheckoutPage() {
         setMessage("Unable to load payment gateway. Check network/ad-block settings and try again.");
         setIsPaying(false);
         setStep("review");
+        payStartedAt.current = null;
         return;
       }
 
@@ -172,6 +232,9 @@ export default function CheckoutPage() {
       const data = await parseJsonResponse(res, "Payment server is not reachable.");
       if (!res.ok || !data?.ok) throw new Error(data?.message || "Failed to create order.");
 
+      // Store pending payment info so we can recover if the page reloads (mobile UPI flow)
+      try { sessionStorage.setItem(PENDING_PAYMENT_KEY, JSON.stringify({ orderId: data.order.id, timestamp: Date.now() })); } catch {}
+
       setPaymentPhase("awaiting");
       const razorpay = new window.Razorpay({
         key: data.keyId, amount: data.order.amount, currency: data.order.currency,
@@ -181,6 +244,9 @@ export default function CheckoutPage() {
         handler: async (result) => {
           try {
             setPaymentPhase("verifying");
+            // Save payment ID for recovery if page gets killed during finalization
+            try { sessionStorage.setItem(PENDING_PAYMENT_KEY, JSON.stringify({ orderId: result.razorpay_order_id, paymentId: result.razorpay_payment_id, timestamp: Date.now() })); } catch {}
+
             const vRes = await withTimeout(
               fetch(`${apiBaseUrl}/api/payment/verify`, {
                 method: "POST",
@@ -193,7 +259,12 @@ export default function CheckoutPage() {
             const vData = await parseJsonResponse(vRes, "Payment verification server is not reachable.");
             if (!vRes.ok || !vData?.ok) throw new Error(vData?.message || "Verification failed.");
             setPaymentPhase("finalizing");
-            const fin = await finalizePaidOrder({ provider: "razorpay", status: "paid", razorpayOrderId: result.razorpay_order_id, razorpayPaymentId: result.razorpay_payment_id });
+            const fin = await withTimeout(
+              finalizePaidOrder({ provider: "razorpay", status: "paid", razorpayOrderId: result.razorpay_order_id, razorpayPaymentId: result.razorpay_payment_id }),
+              FINALIZE_TIMEOUT_MS,
+              "Order finalization timed out. Don't worry — your payment is safe. Please check your email or contact support."
+            );
+            try { sessionStorage.removeItem(PENDING_PAYMENT_KEY); } catch {}
             if (fin.ok) {
               navigate("/order-success", { replace: true });
               return;
@@ -207,12 +278,13 @@ export default function CheckoutPage() {
           } finally {
             setIsPaying(false);
             setPaymentPhase("");
+            payStartedAt.current = null;
           }
         },
-        modal: { ondismiss: () => { setIsPaying(false); setPaymentPhase(""); setStep("review"); setMessage("Payment cancelled."); } },
+        modal: { ondismiss: () => { setIsPaying(false); setPaymentPhase(""); payStartedAt.current = null; setStep("review"); setMessage("Payment cancelled."); try { sessionStorage.removeItem(PENDING_PAYMENT_KEY); } catch {} } },
       });
       razorpay.open();
-    } catch (err) { setMessage(err.message || "Checkout failed."); setIsPaying(false); setPaymentPhase(""); setStep("review"); }
+    } catch (err) { setMessage(err.message || "Checkout failed."); setIsPaying(false); setPaymentPhase(""); payStartedAt.current = null; setStep("review"); try { sessionStorage.removeItem(PENDING_PAYMENT_KEY); } catch {} }
   };
 
   const onCod = () => setMessage("COD is currently unavailable.");
