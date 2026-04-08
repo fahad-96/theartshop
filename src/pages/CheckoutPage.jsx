@@ -1,17 +1,13 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import MainHeader from "../components/MainHeader";
 import MapboxAddressInput from "../components/MapboxAddressInput";
 import { useShop } from "../context/ShopContext";
 import { sizeDimensions } from "../data/products";
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
 const ADDRESS_BOOK_STORAGE_KEY_PREFIX = "tas-address-book";
 const ADDRESS_SYNC_TIMEOUT_MS = 6000;
-const PAYMENT_API_TIMEOUT_MS = 15000;
-const FINALIZE_TIMEOUT_MS = 25000;
-const PENDING_PAYMENT_KEY = "tas-pending-payment";
 
 const withTimeout = (promise, timeoutMs, timeoutMessage) => {
   let timeoutId;
@@ -21,121 +17,35 @@ const withTimeout = (promise, timeoutMs, timeoutMessage) => {
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
 };
 
-const parseJsonResponse = async (response, fallbackMessage) => {
-  const contentType = response.headers.get("content-type") || "";
-  if (!contentType.includes("application/json")) {
-    throw new Error(fallbackMessage);
-  }
-  return response.json();
-};
-
-const loadRazorpaySdk = () => {
-  return new Promise((resolve) => {
-    if (window.Razorpay) { resolve(true); return; }
-    const script = document.createElement("script");
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.async = true;
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
-  });
-};
-
 const steps = [
   { key: "address", label: "Address" },
   { key: "review", label: "Review" },
-  { key: "payment", label: "Payment" },
 ];
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState("address");
-  const [isPaying, setIsPaying] = useState(false);
   const [message, setMessage] = useState("");
-  const [paymentPhase, setPaymentPhase] = useState("");
   const [addressBook, setAddressBook] = useState([]);
   const [selectedAddressIndex, setSelectedAddressIndex] = useState(0);
   const [showAddForm, setShowAddForm] = useState(false);
   const [savingAddress, setSavingAddress] = useState(false);
   const [addressForm, setAddressForm] = useState({ fullName: "", phone: "", landmark: "", address: "" });
   const [continuing, setContinuing] = useState(false);
-  const payStartedAt = useRef(null);
-  const paymentConfirmedRef = useRef(false);
-  const recoveryAttemptedRef = useRef(false);
 
   const {
     authUser, authReady, cartItems, cartSubtotal, getProductById,
-    shippingDetails, validateCheckoutReadiness, finalizePaidOrder,
-    updateProfileAddressDetails, setCartMessage,
+    shippingDetails, updateProfileAddressDetails, setCartMessage,
   } = useShop();
 
-  // Recover from a stuck payment state when the user returns to the tab
-  // (common on mobile UPI flows where the browser suspends the page)
-  useEffect(() => {
-    const onVisibilityChange = () => {
-      if (document.visibilityState !== "visible") return;
-      if (!isPaying || !payStartedAt.current) return;
-      // If payment was already confirmed by Razorpay, don't interfere
-      if (paymentConfirmedRef.current) return;
-      const elapsed = Date.now() - payStartedAt.current;
-      // If we've been in the paying state for over 2 minutes, the handler likely never fired
-      if (elapsed > 120_000) {
-        setIsPaying(false);
-        setPaymentPhase("");
-        setStep("review");
-        setMessage("Payment session expired. If you were charged, your order will be confirmed automatically — please check your email or contact support.");
-        payStartedAt.current = null;
-        try { sessionStorage.removeItem(PENDING_PAYMENT_KEY); } catch {}
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
-  }, [isPaying]);
 
-  // Recover from a pending payment when the page was killed/reloaded.
-  // MUST wait for authReady so finalizePaidOrder has access to user data.
-  useEffect(() => {
-    if (!authReady || recoveryAttemptedRef.current) return;
-    recoveryAttemptedRef.current = true;
-    try {
-      const pending = sessionStorage.getItem(PENDING_PAYMENT_KEY);
-      if (!pending) return;
-      const { orderId, paymentId, timestamp, orderSnapshot: savedSnapshot } = JSON.parse(pending);
-      const age = Date.now() - timestamp;
-      sessionStorage.removeItem(PENDING_PAYMENT_KEY);
-      if (orderId && paymentId && age < 300_000) {
-        // Page was killed mid-payment but payment succeeded — finalize
-        paymentConfirmedRef.current = true;
-        setStep("payment");
-        setIsPaying(true);
-        setPaymentPhase("finalizing");
-        withTimeout(
-          finalizePaidOrder({ provider: "razorpay", status: "paid", razorpayOrderId: orderId, razorpayPaymentId: paymentId }, savedSnapshot || null),
-          FINALIZE_TIMEOUT_MS,
-          "Order finalization timed out."
-        ).then((fin) => {
-          if (fin?.ok) { navigate("/order-success", { replace: true }); return; }
-          setPaymentPhase("paid-error");
-          setMessage(`Your payment was received (ID: ${paymentId}). Order saving failed — please contact support. Do NOT pay again.`);
-        }).catch(() => {
-          setPaymentPhase("paid-error");
-          setMessage(`Your payment was received (ID: ${paymentId}). Could not save order — please contact support. Do NOT pay again.`);
-        }).finally(() => { setIsPaying(false); });
-        return;
-      }
-      if (orderId && age < 300_000) {
-        setMessage("A previous payment may have been interrupted. If you were charged, please contact support with order ID: " + orderId);
-      }
-    } catch {}
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authReady]);
 
   useEffect(() => {
     if (authReady && !authUser) navigate("/login", { replace: true });
   }, [authReady, authUser, navigate]);
 
   useEffect(() => {
-    if (authReady && authUser && !cartItems.length && !paymentConfirmedRef.current) {
+    if (authReady && authUser && !cartItems.length) {
       navigate("/cart", { replace: true });
     }
   }, [authReady, authUser, cartItems.length, navigate]);
@@ -144,7 +54,7 @@ export default function CheckoutPage() {
     if (authUser?.email) loadAddressBook();
   }, [authUser?.email]);
 
-  if (!authReady || (!cartItems.length && !paymentConfirmedRef.current)) return null;
+  if (!authReady || !cartItems.length) return null;
 
   const getStorageKey = () => authUser?.email ? `${ADDRESS_BOOK_STORAGE_KEY_PREFIX}:${authUser.email.toLowerCase()}` : "";
 
@@ -207,154 +117,25 @@ export default function CheckoutPage() {
     setStep("review");
   };
 
-  const onPayNow = async () => {
-    const readiness = validateCheckoutReadiness();
-    if (readiness.requiresAuth) { navigate("/login", { replace: true }); return; }
-    if (!readiness.ok) return;
-    if (paymentConfirmedRef.current) return; // Prevent double payment
-
-    setIsPaying(true);
-    setStep("payment");
-    setPaymentPhase("connecting");
-    setMessage("");
-    payStartedAt.current = Date.now();
-
-    try {
-      const sdkReady = await loadRazorpaySdk();
-      if (!sdkReady) {
-        setMessage("Unable to load payment gateway. Check network/ad-block settings and try again.");
-        setIsPaying(false);
-        setPaymentPhase("");
-        setStep("review");
-        payStartedAt.current = null;
-        return;
-      }
-
-      setPaymentPhase("creating");
-      const res = await withTimeout(
-        fetch(`${apiBaseUrl}/api/payment/order`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ amount: cartSubtotal, currency: "INR", receipt: `tas_${Date.now()}`, notes: { userEmail: authUser?.email || "", userName: authUser?.name || "" } }),
+  const goToPayment = () => {
+    const addr = addressBook[selectedAddressIndex];
+    if (!addr) { setMessage("Please select an address first."); return; }
+    navigate("/payment", {
+      state: {
+        items: cartItems.map((item) => {
+          const product = getProductById(item.productId);
+          return {
+            title: product?.title || "Unknown",
+            size: item.size,
+            qty: item.qty,
+            price: product?.pricing?.[item.size] || 0,
+          };
         }),
-        PAYMENT_API_TIMEOUT_MS,
-        "Payment server timeout while creating order."
-      );
-      const data = await parseJsonResponse(res, "Payment server is not reachable.");
-      if (!res.ok || !data?.ok) throw new Error(data?.message || "Failed to create order.");
-
-      // Snapshot order data NOW — this closure survives mobile tab suspension
-      const orderSnapshot = {
-        items: cartItems.map((item) => ({ ...item })),
         subtotal: cartSubtotal,
-        shipping: { ...(selectedAddr || shippingDetails) },
-      };
-
-      // Store pending payment info so we can recover if the page reloads (mobile UPI flow)
-      try { sessionStorage.setItem(PENDING_PAYMENT_KEY, JSON.stringify({ orderId: data.order.id, timestamp: Date.now(), orderSnapshot })); } catch {}
-
-      setPaymentPhase("awaiting");
-      const razorpay = new window.Razorpay({
-        key: data.keyId, amount: data.order.amount, currency: data.order.currency,
-        name: "The Art Shop", description: "Artwork Purchase", order_id: data.order.id,
-        prefill: { name: shippingDetails.fullName || authUser?.name || "", email: authUser?.email || "", contact: shippingDetails.phone || "" },
-        theme: { color: "#0f0f0f" },
-        handler: async (result) => {
-          // ── PAYMENT CONFIRMED BY RAZORPAY — user HAS been charged ──
-          // From this point forward, we must NEVER send the user back to
-          // the review/pay step. The ref prevents cart-empty redirect
-          // and double-pay attempts.
-          paymentConfirmedRef.current = true;
-
-          try {
-            // Save recovery info in case page dies during finalization
-            try { sessionStorage.setItem(PENDING_PAYMENT_KEY, JSON.stringify({ orderId: result.razorpay_order_id, paymentId: result.razorpay_payment_id, timestamp: Date.now(), orderSnapshot })); } catch {}
-
-            // 1. Verify signature (best-effort — Razorpay already confirmed payment)
-            setPaymentPhase("verifying");
-            try {
-              const vRes = await withTimeout(
-                fetch(`${apiBaseUrl}/api/payment/verify`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(result),
-                }),
-                PAYMENT_API_TIMEOUT_MS,
-                "Payment verification timed out."
-              );
-              const vData = await parseJsonResponse(vRes, "Verification server not reachable.");
-              if (!vRes.ok || !vData?.ok) {
-                console.warn("Signature verification response not ok — continuing (payment is confirmed by Razorpay).");
-              }
-            } catch (verifyErr) {
-              // Verification is a defense-in-depth check; Razorpay handler
-              // only fires on successful payment. Log and continue.
-              console.warn("Verification error (non-fatal):", verifyErr?.message);
-            }
-
-            // 2. Finalize order — retry up to 3 times on failure
-            setPaymentPhase("finalizing");
-            let fin = null;
-            for (let attempt = 0; attempt < 3; attempt++) {
-              try {
-                fin = await withTimeout(
-                  finalizePaidOrder({ provider: "razorpay", status: "paid", razorpayOrderId: result.razorpay_order_id, razorpayPaymentId: result.razorpay_payment_id }, orderSnapshot),
-                  FINALIZE_TIMEOUT_MS,
-                  "Order finalization timed out."
-                );
-                if (fin?.ok) break;
-              } catch (e) {
-                fin = { ok: false, message: e?.message || "Order save failed." };
-              }
-              // Wait before retry (skip on last attempt)
-              if (attempt < 2) await new Promise((r) => setTimeout(r, 1500));
-            }
-
-            try { sessionStorage.removeItem(PENDING_PAYMENT_KEY); } catch {}
-
-            if (fin?.ok) {
-              navigate("/order-success", { replace: true });
-            } else {
-              // Payment done, order save failed after retries
-              setPaymentPhase("paid-error");
-              setMessage(`Your payment was successful (Payment ID: ${result.razorpay_payment_id}). We couldn't save your order automatically — please contact support. Do NOT pay again.`);
-            }
-          } catch (err) {
-            // Unexpected error after confirmed payment
-            setPaymentPhase("paid-error");
-            setMessage(`Payment received (ID: ${result.razorpay_payment_id}). Please contact support if your order isn't confirmed. Do not pay again.`);
-          } finally {
-            setIsPaying(false);
-            payStartedAt.current = null;
-          }
-        },
-        modal: {
-          ondismiss: () => {
-            // Only reset if payment wasn't already confirmed
-            if (paymentConfirmedRef.current) return;
-            setIsPaying(false);
-            setPaymentPhase("");
-            payStartedAt.current = null;
-            setStep("review");
-            setMessage("Payment cancelled.");
-            try { sessionStorage.removeItem(PENDING_PAYMENT_KEY); } catch {}
-          },
-        },
-      });
-      razorpay.open();
-    } catch (err) {
-      // Errors before payment was made (SDK load, order creation)
-      if (paymentConfirmedRef.current) return;
-      setMessage(err.message || "Checkout failed.");
-      setIsPaying(false);
-      setPaymentPhase("");
-      payStartedAt.current = null;
-      setStep("review");
-      try { sessionStorage.removeItem(PENDING_PAYMENT_KEY); } catch {}
-    }
+        shipping: { ...addr },
+      },
+    });
   };
-
-  const onCod = () => setMessage("COD is currently unavailable.");
 
   const selectedAddr = addressBook[selectedAddressIndex];
   const currentStepIndex = steps.findIndex((s) => s.key === step);
@@ -484,120 +265,8 @@ export default function CheckoutPage() {
 
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4">
                 <button type="button" onClick={() => setStep("address")} className="border border-white/20 rounded-sm px-4 sm:px-6 py-3 text-xs uppercase tracking-[0.18em] text-white/70 hover:bg-white/5 active:scale-[0.98] transition-transform">Change Address</button>
-                <div className="flex gap-2 sm:gap-3">
-                  <button type="button" onClick={onCod} className="flex-1 sm:flex-none border border-white/20 rounded-sm px-4 sm:px-6 py-3 text-xs uppercase tracking-[0.18em] text-white/70 hover:bg-white/5 active:scale-[0.98] transition-transform">COD</button>
-                  <button type="button" onClick={onPayNow} disabled={isPaying || paymentConfirmedRef.current} className="flex-1 sm:flex-none bg-white text-black rounded-sm px-6 sm:px-8 py-3 text-xs uppercase tracking-[0.18em] font-bold active:scale-[0.98] transition-transform disabled:opacity-50 flex items-center justify-center gap-2">{isPaying && <span className="w-3.5 h-3.5 border-2 border-black/20 border-t-black rounded-full animate-spin" />}{isPaying ? "Processing..." : "Pay Now"}</button>
-                </div>
+                <button type="button" onClick={goToPayment} className="bg-white text-black rounded-sm px-6 sm:px-8 py-3 text-xs uppercase tracking-[0.18em] font-bold active:scale-[0.98] transition-transform flex items-center justify-center gap-2">Continue to Payment</button>
               </div>
-            </motion.div>
-          )}
-
-          {/* STEP 3: Payment Processing */}
-          {step === "payment" && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16 sm:py-20">
-              {paymentPhase === "paid-error" ? (
-                <>
-                  {/* Payment received but order save failed */}
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ duration: 0.5, type: "spring", stiffness: 200 }}
-                    className="w-16 h-16 mx-auto mb-6 border-2 border-amber-400 rounded-full flex items-center justify-center"
-                  >
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 9v4M12 17h.01M10.29 3.86l-8.6 14.86A2 2 0 003.43 21h17.14a2 2 0 001.74-2.98L13.71 3.86a2 2 0 00-3.42 0z" />
-                    </svg>
-                  </motion.div>
-                  <h3 className="text-lg sm:text-xl font-bold uppercase tracking-wider mb-3">Payment Received</h3>
-                  <p className="text-sm text-white/60 mb-8 max-w-sm mx-auto leading-relaxed">{message}</p>
-                  <div className="flex flex-col sm:flex-row gap-3 items-center justify-center">
-                    <a href="mailto:theartshop.admin@gmail.com" className="bg-white text-black px-6 py-3.5 rounded-sm text-[10px] sm:text-xs uppercase tracking-[0.18em] font-bold hover:bg-white/90 transition-colors">Contact Support</a>
-                    <button type="button" onClick={() => navigate("/")} className="border border-white/20 px-6 py-3.5 rounded-sm text-[10px] sm:text-xs uppercase tracking-[0.18em] text-white/70 hover:bg-white/5 transition-colors">Back to Home</button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  {/* Animated concentric rings */}
-                  <div className="relative w-24 h-24 mx-auto mb-8">
-                    <motion.div
-                      className="absolute inset-0 rounded-full border border-white/10"
-                      animate={{ scale: [1, 1.5, 1], opacity: [0.3, 0, 0.3] }}
-                      transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                    />
-                    <motion.div
-                      className="absolute inset-2 rounded-full border border-white/15"
-                      animate={{ scale: [1, 1.3, 1], opacity: [0.4, 0.1, 0.4] }}
-                      transition={{ duration: 2, repeat: Infinity, ease: "easeInOut", delay: 0.3 }}
-                    />
-                    <motion.div
-                      className="absolute inset-4 rounded-full border border-white/20"
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-                      style={{ borderTopColor: "white" }}
-                    />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <motion.svg
-                        width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-                        className="text-white"
-                        animate={{ opacity: [0.6, 1, 0.6] }}
-                        transition={{ duration: 1.5, repeat: Infinity }}
-                      >
-                        {paymentPhase === "verifying" || paymentPhase === "finalizing" ? (
-                          <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" />
-                        ) : (
-                          <path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" strokeLinecap="round" strokeLinejoin="round" />
-                        )}
-                      </motion.svg>
-                    </div>
-                  </div>
-
-                  {/* Phase messages */}
-                  <AnimatePresence mode="wait">
-                    <motion.div
-                      key={paymentPhase}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <p className="text-sm sm:text-base font-bold uppercase tracking-[0.2em] text-white mb-2">
-                        {paymentPhase === "connecting" && "Connecting..."}
-                        {paymentPhase === "creating" && "Creating Order..."}
-                        {paymentPhase === "awaiting" && "Awaiting Payment..."}
-                        {paymentPhase === "verifying" && "Verifying Payment..."}
-                        {paymentPhase === "finalizing" && "Finalizing Order..."}
-                        {!paymentPhase && "Processing..."}
-                      </p>
-                      <p className="text-xs text-white/40 tracking-[0.1em]">
-                        {paymentPhase === "connecting" && "Setting up secure connection"}
-                        {paymentPhase === "creating" && "Preparing your order with the payment gateway"}
-                        {paymentPhase === "awaiting" && "Complete payment in the popup window"}
-                        {paymentPhase === "verifying" && "Confirming with payment provider"}
-                        {paymentPhase === "finalizing" && "Saving your order — almost done"}
-                        {!paymentPhase && "Please wait"}
-                      </p>
-                    </motion.div>
-                  </AnimatePresence>
-
-                  {/* Progress dots */}
-                  <div className="flex items-center justify-center gap-2 mt-8">
-                    {["connecting", "creating", "awaiting", "verifying", "finalizing"].map((phase, i) => {
-                      const phases = ["connecting", "creating", "awaiting", "verifying", "finalizing"];
-                      const currentIdx = phases.indexOf(paymentPhase);
-                      return (
-                        <motion.div
-                          key={phase}
-                          className={`w-1.5 h-1.5 rounded-full ${i <= currentIdx ? "bg-white" : "bg-white/15"}`}
-                          animate={i === currentIdx ? { scale: [1, 1.4, 1] } : {}}
-                          transition={{ duration: 0.8, repeat: Infinity }}
-                        />
-                      );
-                    })}
-                  </div>
-
-                  <p className="text-[9px] text-white/20 uppercase tracking-[0.3em] mt-6">Do not close this page</p>
-                </>
-              )}
             </motion.div>
           )}
         </div>

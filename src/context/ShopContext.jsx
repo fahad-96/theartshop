@@ -768,6 +768,8 @@ export function ShopProvider({ children }) {
 
   const handleMockCheckout = () => finalizePaidOrder({ provider: "mock", status: "paid" });
 
+  const clearCart = () => setCartItems([]);
+
   const addToWishlist = (productId) => {
     setWishlistItems((prev) => {
       if (prev.includes(productId)) return prev;
@@ -825,6 +827,7 @@ export function ShopProvider({ children }) {
         validateCheckoutReadiness,
         finalizePaidOrder,
         handleMockCheckout,
+        clearCart,
       }}
     >
       {children}

@@ -249,6 +249,43 @@ $$;
 
 grant execute on function public.delete_own_account(text) to authenticated;
 
+-- Confirm a pending order's payment (called from client after Razorpay success).
+-- Uses security definer to bypass RLS while still checking auth.uid().
+create or replace function public.confirm_order_payment(
+  p_order_ref text,
+  p_payment jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_order public.orders;
+begin
+  if auth.uid() is null then
+    return jsonb_build_object('ok', false, 'message', 'Not authenticated');
+  end if;
+
+  update public.orders
+  set status = 'Paid',
+      payment = p_payment,
+      updated_at = now()
+  where order_ref = p_order_ref
+    and user_id = auth.uid()
+    and lower(status) in ('pending', 'placed')
+  returning * into v_order;
+
+  if not found then
+    return jsonb_build_object('ok', false, 'message', 'Order not found or already confirmed.');
+  end if;
+
+  return jsonb_build_object('ok', true, 'order_ref', v_order.order_ref);
+end;
+$$;
+
+grant execute on function public.confirm_order_payment(text, jsonb) to authenticated;
+
 drop trigger if exists trg_update_product_rating on public.customer_reviews;
 create trigger trg_update_product_rating
 after insert or update or delete on public.customer_reviews

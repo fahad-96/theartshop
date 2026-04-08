@@ -14,6 +14,7 @@ import AccountActivatedPage from "./pages/AccountActivatedPage";
 import AccountDeletionCompletedPage from "./pages/AccountDeletionCompletedPage";
 import AdminLoginPage from "./pages/AdminLoginPage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
+import PaymentPage from "./pages/PaymentPage";
 
 function NotFoundPage() {
 	return (
@@ -41,6 +42,7 @@ export default function App() {
 			<Route path="/account-deleted" element={<AccountDeletionCompletedPage />} />
 			<Route path="/cart" element={<CartPage />} />
 			<Route path="/checkout" element={<CheckoutPage />} />
+			<Route path="/payment" element={<PaymentPage />} />
 			<Route path="/order-success" element={<OrderSuccessPage />} />
 			<Route path="/product/:productKey" element={<ProductPage />} />
 			<Route path="/wishlist" element={<WishlistPage />} />
