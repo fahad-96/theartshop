@@ -14,6 +14,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/notify/order-email"
+  to = "/.netlify/functions/send-order-email"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useShop } from "../context/ShopContext";
 import { mapProductRowToProduct, slugifyProductTitle } from "../data/products";
@@ -96,6 +96,38 @@ export default function AdminDashboardPage() {
   const [couponForm, setCouponForm] = useState({ code: "", discount_type: "percentage", discount_value: 10, minimum_purchase: 0, max_uses: 0, active: true });
   const [editingCouponId, setEditingCouponId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef(null);
+
+  const NOTIF_LS_KEY = "admin_orders_last_seen";
+
+  const newOrders = useMemo(() => {
+    const lastSeen = localStorage.getItem(NOTIF_LS_KEY);
+    if (!lastSeen) return orders;
+    return orders.filter((o) => new Date(o.created_at) > new Date(lastSeen));
+  }, [orders]);
+
+  const markOrdersSeen = useCallback(() => {
+    if (orders.length) {
+      const latest = orders.reduce((max, o) => {
+        const t = new Date(o.created_at).getTime();
+        return t > max ? t : max;
+      }, 0);
+      localStorage.setItem(NOTIF_LS_KEY, new Date(latest).toISOString());
+    }
+  }, [orders]);
+
+  useEffect(() => {
+    if (activeSection === "orders") markOrdersSeen();
+  }, [activeSection, markOrdersSeen]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   useEffect(() => {
     if (!productForm.imageFiles?.length) {
@@ -553,6 +585,59 @@ export default function AdminDashboardPage() {
     </aside>
   );
 
+  const NotificationBell = () => (
+    <div className="relative" ref={notifRef}>
+      <button
+        type="button"
+        onClick={() => { setNotifOpen((v) => !v); }}
+        className="relative text-white/60 hover:text-white p-1.5 rounded-lg hover:bg-white/[0.06] transition-all"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" /></svg>
+        {newOrders.length > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-rose-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none px-1">{newOrders.length > 99 ? "99+" : newOrders.length}</span>
+        )}
+      </button>
+      {notifOpen && (
+        <div className="absolute right-0 top-10 w-80 max-h-96 bg-[#111113] border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden z-50">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+            <h3 className="text-sm font-semibold">New Orders</h3>
+            {newOrders.length > 0 && (
+              <button type="button" onClick={() => { markOrdersSeen(); setNotifOpen(false); }} className="text-[10px] text-white/40 hover:text-white/70 transition-colors">Mark all read</button>
+            )}
+          </div>
+          <div className="overflow-y-auto max-h-72">
+            {newOrders.length === 0 ? (
+              <p className="text-center text-white/30 text-sm py-8">No new orders</p>
+            ) : (
+              newOrders.slice(0, 20).map((o) => (
+                <button
+                  key={o.dbId}
+                  type="button"
+                  onClick={() => { setActiveSection("orders"); setActiveOrder(o); markOrdersSeen(); setNotifOpen(false); }}
+                  className="w-full text-left px-4 py-3 hover:bg-white/[0.04] transition-colors border-b border-white/[0.04] last:border-0"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium">{o.order_ref || o.dbId?.slice(0, 8)}</span>
+                    <span className="text-xs font-semibold text-emerald-400">₹{o.amount}</span>
+                  </div>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-[11px] text-white/50">{o.shipping?.fullName || "Guest"}</span>
+                    <span className="text-[10px] text-white/30">{new Date(o.created_at).toLocaleString()}</span>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+          {newOrders.length > 0 && (
+            <div className="px-4 py-2.5 border-t border-white/[0.06]">
+              <button type="button" onClick={() => { setActiveSection("orders"); markOrdersSeen(); setNotifOpen(false); }} className="w-full text-center text-xs text-white/50 hover:text-white/80 transition-colors">View all orders →</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-[#09090b] text-white">
       {/* Mobile header */}
@@ -563,9 +648,12 @@ export default function AdminDashboardPage() {
           </div>
           <span className="text-sm font-bold">Admin</span>
         </div>
-        <button type="button" onClick={() => setSidebarOpen(!sidebarOpen)} className="text-white/70 p-1">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
-        </button>
+        <div className="flex items-center gap-2">
+          <NotificationBell />
+          <button type="button" onClick={() => setSidebarOpen(!sidebarOpen)} className="text-white/70 p-1">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+          </button>
+        </div>
       </div>
 
       {/* Mobile sidebar overlay */}
@@ -581,6 +669,10 @@ export default function AdminDashboardPage() {
         <div className="hidden lg:block sticky top-0 h-screen overflow-y-auto"><Sidebar /></div>
 
         <main className="p-4 md:p-6 lg:p-8 overflow-x-hidden">
+          {/* Desktop notification bell */}
+          <div className="hidden lg:flex justify-end mb-2">
+            <NotificationBell />
+          </div>
           {/* Flash message */}
           {message && (
             <div className={`mb-5 flex items-center justify-between gap-3 border px-4 py-3 rounded-lg text-sm ${
@@ -788,6 +880,7 @@ export default function AdminDashboardPage() {
                   <table className="w-full text-sm">
                     <thead><tr className="border-b border-white/[0.06] text-[11px] uppercase tracking-wider text-white/35">
                       <th className="p-3 text-left">Order</th>
+                      <th className="p-3 text-left">Customer</th>
                       <th className="p-3 text-left">Amount</th>
                       <th className="p-3 text-left">Status</th>
                       <th className="p-3 text-left">Action</th>
@@ -798,6 +891,10 @@ export default function AdminDashboardPage() {
                           <td className="p-3">
                             <p className="font-medium">{o.order_ref || o.dbId?.slice(0, 8)}</p>
                             <p className="text-[11px] text-white/35 mt-0.5">{new Date(o.created_at).toLocaleString()}</p>
+                          </td>
+                          <td className="p-3">
+                            <p className="text-sm text-white/80 truncate max-w-[140px]">{o.shipping?.fullName || "—"}</p>
+                            <p className="text-[10px] text-white/30 mt-0.5 truncate max-w-[140px]">{o.shipping?.phone || ""}</p>
                           </td>
                           <td className="p-3 font-semibold">₹{o.amount}</td>
                           <td className="p-3"><StatusBadge status={o.status} /></td>

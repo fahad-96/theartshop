@@ -7,6 +7,8 @@ const ShopContext = createContext(null);
 const CART_STORAGE_KEY = "tas-cart";
 const WISHLIST_STORAGE_KEY = "tas-wishlist";
 
+const notifyApiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
+
 const EMPTY_SHIPPING_DETAILS = {
   fullName: "",
   phone: "",
@@ -723,6 +725,21 @@ export function ShopProvider({ children }) {
       }
 
       await saveSupabaseOrder(orderState);
+
+      // Fire-and-forget email notifications (customer + admin)
+      try {
+        fetch(`${notifyApiBaseUrl}/api/notify/order-email`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            orderRef: orderState.id,
+            amount: orderState.amount,
+            items: orderState.items,
+            shipping: { ...orderState.shipping, email: authUser?.email || "" },
+            payment: orderState.payment,
+          }),
+        }).catch(() => {});
+      } catch {}
 
       setCartItems([]);
       await updateProfileAddressDetails(shippingDetails);
