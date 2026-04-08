@@ -9,7 +9,9 @@ const ease = [0.22, 1, 0.36, 1];
 export default function ProductCard({ product, index }) {
   const navigate = useNavigate();
   const { handleBuy, setAuthError, cartItems, authUser, wishlistItems, toggleWishlist } = useShop();
-  const inCart = cartItems.some((item) => item.productId === product.id);
+  const anyInCart = cartItems.some((item) => item.productId === product.id);
+  const sizeInCart = (size) => cartItems.some((item) => item.productId === product.id && item.size === size);
+  const allSizesInCart = ["S", "L", "XL"].every((s) => sizeInCart(s));
   const inWishlist = wishlistItems.includes(product.id);
   const [showSizePicker, setShowSizePicker] = useState(false);
   const pickerRef = useRef(null);
@@ -30,7 +32,7 @@ export default function ProductCard({ product, index }) {
       if (result.requiresAuth) navigate("/login");
       return;
     }
-    if (inCart) return;
+    if (allSizesInCart) return;
     setShowSizePicker(true);
   };
 
@@ -79,7 +81,7 @@ export default function ProductCard({ product, index }) {
           </div>
 
           {/* In-cart badge */}
-          {inCart && (
+          {anyInCart && (
             <span className="absolute top-2 left-2 sm:top-3 sm:left-3 bg-emerald-500 text-black text-[7px] sm:text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-sm">
               In Cart
             </span>
@@ -155,14 +157,14 @@ export default function ProductCard({ product, index }) {
           <button
             type="button"
             onClick={onAddClick}
-            disabled={inCart}
+            disabled={allSizesInCart}
             className={`border px-4 py-2 text-[10px] md:text-xs uppercase tracking-[0.12em] font-bold transition-all duration-300 rounded-sm ${
-              inCart
+              allSizesInCart
                 ? "border-emerald-400/40 text-emerald-300 cursor-default"
                 : "border-white/25 text-white hover:bg-white hover:text-black"
             }`}
           >
-            {inCart ? "In Cart" : "Add to Cart"}
+            {allSizesInCart ? "All Sizes In Cart" : "Add to Cart"}
           </button>
         </div>
       </div>
@@ -198,18 +200,25 @@ export default function ProductCard({ product, index }) {
                 </button>
               </div>
               <div className="flex flex-col gap-2">
-                {sizes.map(([size, price], i) => (
+                {sizes.map(([size, price], i) => {
+                  const alreadyInCart = sizeInCart(size);
+                  return (
                   <motion.button
                     key={size}
                     type="button"
                     initial={{ opacity: 0, x: -15 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.06, ease }}
-                    onClick={() => onSizeSelect(size)}
-                    className="flex items-center justify-between border border-white/10 hover:border-white/30 hover:bg-white/5 px-3.5 py-2.5 sm:py-3 transition-all duration-200 group/size rounded-sm"
+                    onClick={() => !alreadyInCart && onSizeSelect(size)}
+                    disabled={alreadyInCart}
+                    className={`flex items-center justify-between border px-3.5 py-2.5 sm:py-3 transition-all duration-200 group/size rounded-sm ${
+                      alreadyInCart
+                        ? "border-emerald-400/20 bg-emerald-500/5 cursor-default"
+                        : "border-white/10 hover:border-white/30 hover:bg-white/5"
+                    }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-white">
+                      <span className={`text-xs sm:text-sm font-black uppercase tracking-wider ${alreadyInCart ? "text-emerald-300" : "text-white"}`}>
                         {size}
                       </span>
                       <span className="text-[8px] sm:text-[10px] text-white/30 tracking-wider">
@@ -217,13 +226,20 @@ export default function ProductCard({ product, index }) {
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs sm:text-sm font-bold text-white/70">₹{price}</span>
-                      {product.mrp?.[size] > price && (
-                        <span className="text-[8px] sm:text-[9px] text-white/25 line-through">₹{product.mrp[size]}</span>
+                      {alreadyInCart ? (
+                        <span className="text-[9px] sm:text-[10px] font-bold text-emerald-300 uppercase tracking-wider">In Cart</span>
+                      ) : (
+                        <>
+                          <span className="text-xs sm:text-sm font-bold text-white/70">₹{price}</span>
+                          {product.mrp?.[size] > price && (
+                            <span className="text-[8px] sm:text-[9px] text-white/25 line-through">₹{product.mrp[size]}</span>
+                          )}
+                        </>
                       )}
                     </div>
                   </motion.button>
-                ))}
+                  );
+                })}
               </div>
             </motion.div>
           </motion.div>

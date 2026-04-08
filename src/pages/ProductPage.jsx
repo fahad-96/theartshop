@@ -22,7 +22,7 @@ export default function ProductPage() {
     );
   }, [getProductById, productKey, products]);
 
-  const inCart = product ? cartItems.some((item) => item.productId === product.id) : false;
+  const inCart = product ? cartItems.some((item) => item.productId === product.id && item.size === selectedSize) : false;
   const inWishlist = product ? wishlistItems.includes(product.id) : false;
 
   if (!product) {
