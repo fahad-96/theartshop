@@ -1,7 +1,19 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import crypto from "crypto";
-import { products, sizeDimensions, INSTAGRAM_URL, WHATSAPP_PHONE } from "../src/data/products.js";
+import {
+  products,
+  sizeDimensions,
+  INSTAGRAM_URL,
+  WHATSAPP_PHONE,
+  slugifyProductTitle,
+  normalizeProductPricing,
+  mapProductRowToProduct,
+  buildProductPayload,
+  LOGO_SRC,
+  FAVICON_SRC,
+  HERO_VIDEO_SRC,
+} from "../src/data/products.js";
 
 const razorpayCreateMock = vi.fn();
 
@@ -68,6 +80,117 @@ describe("Frontend data", () => {
         expect(review.rating).toBeLessThanOrEqual(5);
       });
     });
+  });
+
+  products.forEach((product, index) => {
+    it(`product ${index + 1} MRP is valid and higher than selling price`, () => {
+      expect(product.mrp).toBeDefined();
+      expect(product.mrp.S).toBeGreaterThan(product.pricing.S);
+      expect(product.mrp.L).toBeGreaterThan(product.pricing.L);
+      expect(product.mrp.XL).toBeGreaterThan(product.pricing.XL);
+      expect(product.mrp.S).toBeGreaterThan(0);
+      expect(product.mrp.L).toBeGreaterThan(product.mrp.S);
+      expect(product.mrp.XL).toBeGreaterThan(product.mrp.L);
+    });
+
+    it(`product ${index + 1} has a valid slug`, () => {
+      expect(product.slug).toEqual(expect.any(String));
+      expect(product.slug.length).toBeGreaterThan(0);
+      expect(product.slug).not.toMatch(/[A-Z]/);
+      expect(product.slug).not.toMatch(/\s/);
+      expect(product.slug).not.toMatch(/^-|-$/);
+    });
+
+    it(`product ${index + 1} has a valid category`, () => {
+      expect(["Art", "Deer"]).toContain(product.category);
+    });
+  });
+});
+
+describe("Product utility functions", () => {
+  it("slugifyProductTitle lowercases and replaces spaces", () => {
+    expect(slugifyProductTitle("DEER HEAD")).toBe("deer-head");
+    expect(slugifyProductTitle("CR7")).toBe("cr7");
+    expect(slugifyProductTitle("S LETTER SNAKE")).toBe("s-letter-snake");
+  });
+
+  it("slugifyProductTitle strips leading/trailing hyphens", () => {
+    expect(slugifyProductTitle("--test--")).toBe("test");
+    expect(slugifyProductTitle("  hello  ")).toBe("hello");
+  });
+
+  it("normalizeProductPricing returns correct structure from valid input", () => {
+    const result = normalizeProductPricing({ S: 100, L: 200, XL: 300 }, "test");
+    expect(result).toEqual({ S: 100, L: 200, XL: 300 });
+  });
+
+  it("normalizeProductPricing handles alternate key formats", () => {
+    const result = normalizeProductPricing({ s: 100, l: 200, xl: 300 }, "test");
+    expect(result).toEqual({ S: 100, L: 200, XL: 300 });
+  });
+
+  it("normalizeProductPricing falls back to deer pricing for deer products", () => {
+    const result = normalizeProductPricing(null, "DEER HEAD");
+    expect(result).toEqual({ S: 999, L: 1499, XL: 1999 });
+  });
+
+  it("normalizeProductPricing falls back to regular pricing", () => {
+    const result = normalizeProductPricing(undefined, "ART");
+    expect(result).toEqual({ S: 599, L: 999, XL: 1499 });
+  });
+
+  it("mapProductRowToProduct maps a DB row correctly", () => {
+    const row = {
+      id: 42,
+      title: "TEST ART",
+      slug: "test-art",
+      image_path: "test.jpeg",
+      pricing: { S: 500, L: 800, XL: 1200 },
+      info: "Test info text for this product.",
+      short_info: "Short test info.",
+      category: "Art",
+      is_active: true,
+    };
+    const mapped = mapProductRowToProduct(row);
+    expect(mapped.id).toBe("42");
+    expect(mapped.title).toBe("TEST ART");
+    expect(mapped.slug).toBe("test-art");
+    expect(mapped.pricing).toEqual({ S: 500, L: 800, XL: 1200 });
+    expect(mapped.info).toBe("Test info text for this product.");
+    expect(mapped.shortInfo).toBe("Short test info.");
+    expect(mapped.isActive).toBe(true);
+  });
+
+  it("mapProductRowToProduct handles missing fields gracefully", () => {
+    const mapped = mapProductRowToProduct({});
+    expect(mapped.title).toBe("Untitled");
+    expect(mapped.pricing).toBeDefined();
+    expect(mapped.reviews).toHaveLength(3);
+    expect(mapped.isActive).toBe(true);
+  });
+
+  it("buildProductPayload produces correct shape", () => {
+    const payload = buildProductPayload({
+      title: "  WOLF HEAD  ",
+      slug: "wolf-head",
+      imagePath: "wolf.jpeg",
+      category: "Art",
+      info: "Wolf art info.",
+      shortInfo: "Wolf short.",
+      pricing: { S: 599, L: 999, XL: 1499 },
+    });
+    expect(payload.title).toBe("WOLF HEAD");
+    expect(payload.slug).toBe("wolf-head");
+    expect(payload.image_path).toBe("wolf.jpeg");
+    expect(payload.pricing).toEqual({ S: 599, L: 999, XL: 1499 });
+    expect(payload.is_active).toBe(true);
+    expect(payload.publish_status).toBe("published");
+  });
+
+  it("exports media and branding constants", () => {
+    expect(LOGO_SRC).toContain("logo.svg");
+    expect(FAVICON_SRC).toContain("favicon.png");
+    expect(HERO_VIDEO_SRC).toContain("hero.mp4");
   });
 });
 
@@ -186,5 +309,48 @@ describe("Backend payment API", () => {
       ok: true,
       message: "Payment verified successfully.",
     });
+  });
+
+  it("rejects negative order amount", async () => {
+    ensureTestClient();
+    const { app } = await loadServer();
+    const res = await request(app).post("/api/payment/order").send({ amount: -100 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.message).toMatch(/invalid amount/i);
+  });
+
+  it("rejects non-numeric order amount", async () => {
+    ensureTestClient();
+    const { app } = await loadServer();
+    const res = await request(app).post("/api/payment/order").send({ amount: "abc" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.message).toMatch(/invalid amount/i);
+  });
+
+  it("handles Razorpay create failure gracefully", async () => {
+    ensureTestClient();
+    razorpayCreateMock.mockRejectedValueOnce(new Error("Razorpay API down"));
+
+    const { app } = await loadServer();
+    const res = await request(app).post("/api/payment/order").send({ amount: 599 });
+
+    expect(res.status).toBe(500);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.message).toMatch(/failed to create/i);
+  });
+
+  it("rejects verification with partial fields", async () => {
+    ensureTestClient();
+    const { app } = await loadServer();
+    const res = await request(app).post("/api/payment/verify").send({
+      razorpay_order_id: "order_abc",
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
   });
 });

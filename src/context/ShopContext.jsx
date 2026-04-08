@@ -55,10 +55,10 @@ const mapOrderRowToState = (row) => ({
 });
 
 const buildOrderState = (cartItems, cartSubtotal, shippingDetails, paymentInfo, getProductById) => ({
-  id: `ord-${Date.now()}`,
+  id: paymentInfo?.razorpayOrderId || `ord-${Date.now()}`,
   date: new Date().toISOString().slice(0, 10),
   amount: cartSubtotal,
-  status: "Placed",
+  status: paymentInfo?.status ? String(paymentInfo.status).charAt(0).toUpperCase() + String(paymentInfo.status).slice(1) : "Placed",
   items: cartItems.map((item) => {
     const product = getProductById(item.productId);
     return {
@@ -86,6 +86,24 @@ const withTimeout = async (promise, timeoutMs = 15000, timeoutMessage = "Request
     clearTimeout(timeoutId);
   }
 };
+
+const TRANSIENT_ORDER_ERROR_PATTERNS = [
+  "network",
+  "fetch",
+  "timed out",
+  "timeout",
+  "failed to fetch",
+  "gateway",
+  "temporarily unavailable",
+  "connection",
+];
+
+const isTransientOrderError = (error) => {
+  const text = String(error?.message || error || "").toLowerCase();
+  return TRANSIENT_ORDER_ERROR_PATTERNS.some((pattern) => text.includes(pattern));
+};
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export function ShopProvider({ children }) {
   const [authUser, setAuthUser] = useState(null);
@@ -639,7 +657,7 @@ export function ShopProvider({ children }) {
   };
 
   const saveSupabaseOrder = async (orderState) => {
-    const { data, error } = await supabase.from("orders").insert({
+    const payload = {
       user_id: authUser.id,
       order_ref: orderState.id,
       amount: orderState.amount,
@@ -648,34 +666,73 @@ export function ShopProvider({ children }) {
       items: orderState.items,
       shipping: orderState.shipping,
       payment: orderState.payment || {},
-    }).select("*").single();
+    };
 
-    if (error) throw error;
-    const normalized = mapOrderRowToState(data);
-    setOrders((prev) => [normalized, ...prev]);
+    let lastError = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const { data, error } = await supabase.from("orders").insert(payload).select("*").single();
+
+      if (!error) {
+        const normalized = mapOrderRowToState(data);
+        setOrders((prev) => [normalized, ...prev]);
+        return normalized;
+      }
+
+      const errorText = String(error?.message || "").toLowerCase();
+      if (errorText.includes("duplicate key") || errorText.includes("orders_order_ref_key")) {
+        const { data: existing, error: fetchError } = await supabase
+          .from("orders")
+          .select("*")
+          .eq("order_ref", orderState.id)
+          .maybeSingle();
+
+        if (!fetchError && existing) {
+          const normalized = mapOrderRowToState(existing);
+          setOrders((prev) => {
+            const withoutDuplicate = prev.filter((row) => String(row.id) !== String(normalized.id));
+            return [normalized, ...withoutDuplicate];
+          });
+          return normalized;
+        }
+      }
+
+      lastError = error;
+      if (!isTransientOrderError(error) || attempt === 1) break;
+      await delay(700);
+    }
+
+    throw lastError || new Error("Order could not be saved.");
   };
 
   const finalizePaidOrder = async (paymentInfo = null) => {
     const readiness = validateCheckoutReadiness();
-    if (!readiness.ok) return readiness;
+    if (!readiness.ok) {
+      return {
+        ...readiness,
+        message: cartMessage || authError || "Please complete checkout details before payment.",
+      };
+    }
 
     const orderState = buildOrderState(cartItems, cartSubtotal, shippingDetails, paymentInfo, getProductById);
 
     try {
       if (!isSupabaseConfigured || !supabase || !authUser?.id) {
-        setCartMessage("Order service is not configured.");
-        return { requiresAuth: false, ok: false };
+        const message = "Order service is not configured.";
+        setCartMessage(message);
+        return { requiresAuth: false, ok: false, message };
       }
 
       await saveSupabaseOrder(orderState);
 
       setCartItems([]);
       await updateProfileAddressDetails(shippingDetails);
-      setCartMessage("Order placed successfully. We will contact you soon.");
-      return { requiresAuth: false, ok: true };
+      const message = "Order placed successfully. We will contact you soon.";
+      setCartMessage(message);
+      return { requiresAuth: false, ok: true, message };
     } catch (error) {
-      setCartMessage(error.message || "Order could not be saved.");
-      return { requiresAuth: false, ok: false };
+      const message = error?.message || "Order could not be saved.";
+      setCartMessage(message);
+      return { requiresAuth: false, ok: false, message };
     }
   };
 
@@ -690,6 +747,12 @@ export function ShopProvider({ children }) {
 
   const removeFromWishlist = (productId) => {
     setWishlistItems((prev) => prev.filter((id) => id !== productId));
+  };
+
+  const toggleWishlist = (productId) => {
+    setWishlistItems((prev) =>
+      prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId]
+    );
   };
 
   return (
@@ -722,6 +785,7 @@ export function ShopProvider({ children }) {
         addToCart,
         addToWishlist,
         removeFromWishlist,
+        toggleWishlist,
         handleBuy,
         fulfillPendingBuy,
         updateCartQty,

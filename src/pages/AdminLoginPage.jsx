@@ -194,9 +194,6 @@ export default function AdminLoginPage() {
           </button>
         </form>
 
-        <p className="mt-6 text-xs uppercase tracking-[0.22em] text-white/45 leading-relaxed">
-          Access is limited by Supabase admin whitelist and row-level security.
-        </p>
       </div>
     </div>
   );

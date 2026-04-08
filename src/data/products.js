@@ -84,6 +84,13 @@ const getPricing = (title) => {
     : { S: 599, L: 999, XL: 1499 };
 };
 
+const getMrp = (title) => {
+  const isDeer = title.toLowerCase().includes("deer");
+  return isDeer
+    ? { S: 2499, L: 3799, XL: 4999 }
+    : { S: 1499, L: 2499, XL: 3799 };
+};
+
 export const slugifyProductTitle = (title) => title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
 export const products = filenames.map((filename, i) => {
@@ -94,6 +101,7 @@ export const products = filenames.map((filename, i) => {
     slug: slugifyProductTitle(title),
     src: `${BASE_URL}image/${encodeURIComponent(filename)}`,
     pricing: getPricing(title),
+    mrp: getMrp(title),
     info: productCopy[title]?.info || getDefaultProductInfo(title),
     shortInfo: productCopy[title]?.short || getDefaultProductInfo(title),
     category: title.toLowerCase().includes("deer") ? "Deer" : "Art",
@@ -105,6 +113,7 @@ export const HERO_VIDEO_SRC = `${BASE_URL}videos/hero.mp4`;
 export const HERO_VIDEO_MOBILE_SRC = `${BASE_URL}videos/hero-mobile.mp4`;
 export const SECTION_CONNECTOR_VIDEO_SRC = `${BASE_URL}videos/section-connector.mp4`;
 export const LOGO_SRC = `${BASE_URL}logo.svg`;
+export const FAVICON_SRC = `${BASE_URL}favicon.png`;
 export const INSTAGRAM_URL = "https://www.instagram.com/theartshop.in";
 export const WHATSAPP_PHONE = "+916006448855";
 
@@ -150,6 +159,7 @@ export const mapProductRowToProduct = (row) => {
     imageGallery: gallery,
     src: resolveProductImageSrc(primaryImage),
     pricing: normalizeProductPricing(row?.pricing, title),
+    mrp: row?.mrp || getMrp(title),
     info: row?.info || getDefaultProductInfo(title),
     shortInfo: row?.short_info || row?.shortInfo || getDefaultProductInfo(title),
     category: row?.category || (title.toLowerCase().includes("deer") ? "Deer" : "Art"),

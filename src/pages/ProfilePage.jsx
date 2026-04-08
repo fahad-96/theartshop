@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import MainHeader from "../components/MainHeader";
 import MapboxAddressInput from "../components/MapboxAddressInput";
 import { useShop } from "../context/ShopContext";
@@ -264,9 +265,9 @@ export default function ProfilePage() {
 
   const renderOrders = () => {
     return (
-      <div className="border border-white/10 bg-white/[0.03] p-6 md:p-8">
+      <div className="border border-white/10 bg-white/[0.03] rounded-sm p-4 sm:p-6 md:p-8">
         <div className="flex items-center justify-between gap-4">
-          <h2 className="text-2xl md:text-3xl font-black uppercase tracking-tight">Orders</h2>
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-black uppercase tracking-tight">Orders</h2>
           <button
             type="button"
             onClick={() => navigate("/")}
@@ -281,7 +282,7 @@ export default function ProfilePage() {
         ) : (
           <div className="mt-6 space-y-4">
             {orders.map((order) => (
-              <div key={order.id} className="border border-white/10 bg-black/25 p-4 rounded-xl">
+              <div key={order.id} className="border border-white/10 bg-black/25 rounded-sm p-4 sm:p-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-sm text-white/55 uppercase tracking-[0.18em]">{order.id}</p>
@@ -307,9 +308,9 @@ export default function ProfilePage() {
 
   const renderAddresses = () => {
     return (
-      <div className="border border-white/10 bg-white/[0.03] p-6 md:p-8">
+      <div className="border border-white/10 bg-white/[0.03] rounded-sm p-4 sm:p-6 md:p-8">
         <div className="flex items-center justify-between gap-4">
-          <h2 className="text-2xl md:text-3xl font-black uppercase tracking-tight">Addresses</h2>
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-black uppercase tracking-tight">Addresses</h2>
           {!isEditingAddress && (
             <button
               type="button"
@@ -333,7 +334,7 @@ export default function ProfilePage() {
                 setAddressForm((prev) => ({ ...prev, fullName: e.target.value }));
                 setMessage("");
               }}
-              className="w-full bg-black/40 border border-white/20 px-4 py-3 outline-none focus:border-white"
+              className="w-full bg-black/40 border border-white/20 rounded-sm px-4 py-3.5 outline-none focus:border-white transition-colors"
               placeholder="Recipient full name"
             />
 
@@ -345,7 +346,7 @@ export default function ProfilePage() {
                 setAddressForm((prev) => ({ ...prev, phone: nextPhone }));
                 setMessage("");
               }}
-              className="w-full bg-black/40 border border-white/20 px-4 py-3 outline-none focus:border-white"
+              className="w-full bg-black/40 border border-white/20 rounded-sm px-4 py-3.5 outline-none focus:border-white transition-colors"
               placeholder="Phone number"
             />
 
@@ -356,7 +357,7 @@ export default function ProfilePage() {
                 setAddressForm((prev) => ({ ...prev, landmark: e.target.value }));
                 setMessage("");
               }}
-              className="w-full bg-black/40 border border-white/20 px-4 py-3 outline-none focus:border-white"
+              className="w-full bg-black/40 border border-white/20 rounded-sm px-4 py-3.5 outline-none focus:border-white transition-colors"
               placeholder="Near mosque, school, mall, etc."
             />
 
@@ -370,7 +371,7 @@ export default function ProfilePage() {
             />
 
             <div className="flex flex-wrap gap-2 pt-1">
-              <button type="submit" className="bg-white text-black py-3 px-6 uppercase tracking-[0.2em] font-bold">
+              <button type="submit" className="bg-white text-black py-3.5 px-6 rounded-sm uppercase tracking-[0.2em] font-bold active:scale-[0.98] transition-transform">
                 Save Address
               </button>
               <button
@@ -380,27 +381,27 @@ export default function ProfilePage() {
                   setEditingAddressIndex(-1);
                   setMessage("");
                 }}
-                className="border border-white/30 px-6 py-3 text-xs uppercase tracking-[0.18em] text-white/85 hover:bg-white/10"
+                className="border border-white/30 rounded-sm px-6 py-3.5 text-xs uppercase tracking-[0.18em] text-white/85 hover:bg-white/10 active:scale-[0.98] transition-transform"
               >
                 Cancel
               </button>
             </div>
           </form>
         ) : (
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-4 sm:mt-6 grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             <button
               type="button"
               onClick={handleStartAddAddress}
-              className="min-h-[220px] border border-dashed border-white/30 bg-black/25 rounded-xl flex flex-col items-center justify-center hover:bg-white/[0.06] transition"
+              className="min-h-[180px] sm:min-h-[220px] border border-dashed border-white/30 bg-black/25 rounded-sm flex flex-col items-center justify-center hover:bg-white/[0.06] active:scale-[0.98] transition"
             >
-              <span className="text-6xl leading-none text-white/35">+</span>
-              <span className="mt-2 text-2xl font-bold text-white/80">Add address</span>
+              <span className="text-5xl sm:text-6xl leading-none text-white/35">+</span>
+              <span className="mt-2 text-xl sm:text-2xl font-bold text-white/80">Add address</span>
             </button>
 
             {addressBook.map((entry, index) => {
               const isDefault = index === defaultAddressIndex;
               return (
-                <div key={`${entry.fullName}-${entry.phone}-${index}`} className="min-h-[220px] border border-white/20 bg-black/25 rounded-xl p-5">
+                <div key={`${entry.fullName}-${entry.phone}-${index}`} className="min-h-[180px] sm:min-h-[220px] border border-white/20 bg-black/25 rounded-sm p-4 sm:p-5">
                   <p className="text-xs uppercase tracking-[0.2em] text-white/55">
                     {isDefault ? "Default" : "Address"}
                   </p>
@@ -503,9 +504,9 @@ export default function ProfilePage() {
     };
 
     return (
-      <div className="border border-white/10 bg-white/[0.03] p-6 md:p-8">
-        <h2 className="text-2xl md:text-3xl font-black uppercase tracking-tight">Login & Security</h2>
-        <div className="mt-6 border border-white/10 bg-black/25 p-5 rounded-xl space-y-3">
+      <div className="border border-white/10 bg-white/[0.03] rounded-sm p-4 sm:p-6 md:p-8">
+        <h2 className="text-xl sm:text-2xl md:text-3xl font-black uppercase tracking-tight">Login & Security</h2>
+        <div className="mt-4 sm:mt-6 border border-white/10 bg-black/25 p-4 sm:p-5 rounded-sm space-y-3">
           <p className="text-xs uppercase tracking-[0.2em] text-white/50">Account</p>
           <p className="text-white font-semibold">{authUser.name}</p>
           <p className="text-white/75">{authUser.email}</p>
@@ -514,7 +515,7 @@ export default function ProfilePage() {
             <button
               type="button"
               onClick={() => navigate("/login")}
-              className="border border-white/30 px-4 py-2 text-xs uppercase tracking-[0.18em] text-white/85 hover:bg-white/10"
+              className="border border-white/30 rounded-sm px-4 py-2.5 text-xs uppercase tracking-[0.18em] text-white/85 hover:bg-white/10 active:scale-[0.98] transition-transform"
             >
               Login Page
             </button>
@@ -524,21 +525,21 @@ export default function ProfilePage() {
                 await logout();
                 navigate("/login");
               }}
-              className="border border-rose-300/40 px-4 py-2 text-xs uppercase tracking-[0.18em] text-rose-200 hover:bg-rose-500/10"
+              className="border border-rose-300/40 rounded-sm px-4 py-2.5 text-xs uppercase tracking-[0.18em] text-rose-200 hover:bg-rose-500/10 active:scale-[0.98] transition-transform"
             >
               Logout
             </button>
           </div>
         </div>
 
-        <form onSubmit={onChangePassword} className="mt-6 border border-white/10 bg-black/25 p-5 rounded-xl space-y-3">
+        <form onSubmit={onChangePassword} className="mt-4 sm:mt-6 border border-white/10 bg-black/25 p-4 sm:p-5 rounded-sm space-y-3">
           <p className="text-xs uppercase tracking-[0.2em] text-white/50">Change Password</p>
           <input
             type="password"
             value={passwordForm.currentPassword}
             onChange={(e) => setPasswordForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
             placeholder="Current password"
-            className="w-full bg-black/40 border border-white/20 px-4 py-3 outline-none focus:border-white"
+            className="w-full bg-black/40 border border-white/20 rounded-sm px-4 py-3.5 outline-none focus:border-white transition-colors"
           />
           <input
             type="password"
@@ -546,7 +547,7 @@ export default function ProfilePage() {
             value={passwordForm.newPassword}
             onChange={(e) => setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))}
             placeholder="New password"
-            className="w-full bg-black/40 border border-white/20 px-4 py-3 outline-none focus:border-white"
+            className="w-full bg-black/40 border border-white/20 rounded-sm px-4 py-3.5 outline-none focus:border-white transition-colors"
           />
           <input
             type="password"
@@ -554,18 +555,18 @@ export default function ProfilePage() {
             value={passwordForm.confirmPassword}
             onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
             placeholder="Confirm password"
-            className="w-full bg-black/40 border border-white/20 px-4 py-3 outline-none focus:border-white"
+            className="w-full bg-black/40 border border-white/20 rounded-sm px-4 py-3.5 outline-none focus:border-white transition-colors"
           />
           <button
             type="submit"
             disabled={changingPassword}
-            className="border border-white/30 px-4 py-2 text-xs uppercase tracking-[0.18em] text-white/85 hover:bg-white/10 disabled:opacity-60"
+            className="border border-white/30 rounded-sm px-4 py-2.5 text-xs uppercase tracking-[0.18em] text-white/85 hover:bg-white/10 active:scale-[0.98] transition-transform disabled:opacity-60"
           >
             {changingPassword ? "Updating..." : "Change Password"}
           </button>
         </form>
 
-        <div className="mt-6 border border-rose-300/30 bg-rose-900/10 p-5 rounded-xl space-y-3">
+        <div className="mt-4 sm:mt-6 border border-rose-300/30 bg-rose-900/10 p-4 sm:p-5 rounded-sm space-y-3">
           <p className="text-xs uppercase tracking-[0.2em] text-rose-200/80">Delete Account</p>
           <p className="text-white/75 text-sm">
             Deleting your account is permanent. This action is blocked if you have pending orders.
@@ -578,7 +579,7 @@ export default function ProfilePage() {
                 setShowDeletePrompt(true);
                 setSecurityMessage("");
               }}
-              className="border border-rose-400/70 bg-rose-600/80 px-4 py-2 text-xs uppercase tracking-[0.18em] text-white hover:bg-rose-600"
+              className="border border-rose-400/70 bg-rose-600/80 rounded-sm px-4 py-2.5 text-xs uppercase tracking-[0.18em] text-white hover:bg-rose-600 active:scale-[0.98] transition-transform"
             >
               Delete Account
             </button>
@@ -589,13 +590,13 @@ export default function ProfilePage() {
                 value={deletePassword}
                 onChange={(e) => setDeletePassword(e.target.value)}
                 placeholder="Enter password to delete account"
-                className="w-full bg-black/40 border border-rose-300/40 px-4 py-3 outline-none focus:border-rose-300"
+                className="w-full bg-black/40 border border-rose-300/40 rounded-sm px-4 py-3.5 outline-none focus:border-rose-300 transition-colors"
               />
               <div className="flex gap-2">
                 <button
                   type="submit"
                   disabled={deletingAccount}
-                  className="border border-rose-400/70 bg-rose-600/90 px-4 py-2 text-xs uppercase tracking-[0.18em] text-white hover:bg-rose-600 disabled:opacity-60"
+                  className="border border-rose-400/70 bg-rose-600/90 rounded-sm px-4 py-2.5 text-xs uppercase tracking-[0.18em] text-white hover:bg-rose-600 active:scale-[0.98] transition-transform disabled:opacity-60"
                 >
                   {deletingAccount ? "Deleting..." : "Confirm Delete"}
                 </button>
@@ -605,7 +606,7 @@ export default function ProfilePage() {
                     setShowDeletePrompt(false);
                     setDeletePassword("");
                   }}
-                  className="border border-white/30 px-4 py-2 text-xs uppercase tracking-[0.18em] text-white/85 hover:bg-white/10"
+                  className="border border-white/30 rounded-sm px-4 py-2.5 text-xs uppercase tracking-[0.18em] text-white/85 hover:bg-white/10 active:scale-[0.98] transition-transform"
                 >
                   Cancel
                 </button>
@@ -625,14 +626,14 @@ export default function ProfilePage() {
 
   const renderContact = () => {
     return (
-      <div className="border border-white/10 bg-white/[0.03] p-6 md:p-8">
-        <h2 className="text-2xl md:text-3xl font-black uppercase tracking-tight">Contact Us</h2>
-        <div className="mt-6 border border-white/10 bg-black/25 p-5 rounded-xl">
+      <div className="border border-white/10 bg-white/[0.03] rounded-sm p-4 sm:p-6 md:p-8">
+        <h2 className="text-xl sm:text-2xl md:text-3xl font-black uppercase tracking-tight">Contact Us</h2>
+        <div className="mt-4 sm:mt-6 border border-white/10 bg-black/25 p-4 sm:p-5 rounded-sm">
           <p className="text-white/80">Need help with orders, delivery, or custom art requests? We are available now.</p>
           <div className="mt-5 flex flex-wrap gap-2">
             <a
               href={`tel:${supportPhone}`}
-              className="border border-white/30 px-4 py-2 text-xs uppercase tracking-[0.18em] text-white/85 hover:bg-white/10"
+              className="border border-white/30 rounded-sm px-4 py-2.5 text-xs uppercase tracking-[0.18em] text-white/85 hover:bg-white/10 active:scale-[0.98] transition-transform"
             >
               Call Now
             </a>
@@ -640,7 +641,7 @@ export default function ProfilePage() {
               href={`https://wa.me/${whatsappDigits}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="border border-white/30 px-4 py-2 text-xs uppercase tracking-[0.18em] text-white/85 hover:bg-white/10"
+              className="border border-white/30 rounded-sm px-4 py-2.5 text-xs uppercase tracking-[0.18em] text-white/85 hover:bg-white/10 active:scale-[0.98] transition-transform"
             >
               Chat Now
             </a>
@@ -658,33 +659,47 @@ export default function ProfilePage() {
     return renderContact();
   };
 
+  const ease = [0.22, 1, 0.36, 1];
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
       <MainHeader />
-      <div className="pt-28 pb-16 px-4 md:px-12">
-        <div className="max-w-6xl mx-auto">
-          <div className="border border-white/10 bg-white/[0.03] p-6 md:p-8 mb-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-white/55">Your Account</p>
-            <h1 className="mt-3 text-3xl md:text-4xl font-black uppercase tracking-tight">{authUser.name}</h1>
-            <p className="mt-2 text-white/70">{authUser.email}</p>
+      <div className="pt-20 sm:pt-28 pb-12 sm:pb-16 px-3 sm:px-6 md:px-12">
+        <motion.div
+          className="max-w-6xl mx-auto"
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease }}
+        >
+          <div className="border border-white/10 bg-white/[0.03] rounded-sm p-4 sm:p-6 md:p-8 mb-6 sm:mb-8">
+            <p className="text-[10px] sm:text-xs uppercase tracking-[0.3em] text-white/55">Your Account</p>
+            <h1 className="mt-2 sm:mt-3 text-2xl sm:text-3xl md:text-4xl font-black uppercase tracking-tight">{authUser.name}</h1>
+            <p className="mt-1.5 sm:mt-2 text-sm sm:text-base text-white/70">{authUser.email}</p>
 
-            <div className="mt-6 grid sm:grid-cols-2 gap-4">
+            <div className="mt-4 sm:mt-6 grid grid-cols-2 gap-2 sm:gap-4">
               {sectionCards.map((card) => (
                 <button
                   key={card.id}
                   type="button"
                   onClick={() => setActiveSection(card.id)}
-                  className={`text-left border p-4 transition-colors ${activeSection === card.id ? "border-white bg-white/10" : "border-white/15 bg-black/25 hover:bg-white/5"}`}
+                  className={`text-left border rounded-sm p-3 sm:p-4 transition-colors active:scale-[0.98] ${activeSection === card.id ? "border-white bg-white/10" : "border-white/15 bg-black/25 hover:bg-white/5"}`}
                 >
-                  <p className="text-lg font-bold uppercase tracking-[0.08em]">{card.title}</p>
-                  <p className="mt-2 text-sm text-white/65">{card.subtitle}</p>
+                  <p className="text-sm sm:text-lg font-bold uppercase tracking-[0.08em]">{card.title}</p>
+                  <p className="mt-1 sm:mt-2 text-xs sm:text-sm text-white/65 line-clamp-2">{card.subtitle}</p>
                 </button>
               ))}
             </div>
           </div>
 
-          {renderSection()}
-        </div>
+          <motion.div
+            key={activeSection}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease }}
+          >
+            {renderSection()}
+          </motion.div>
+        </motion.div>
       </div>
     </div>
   );
