@@ -706,23 +706,36 @@ export function ShopProvider({ children }) {
     throw lastError || new Error("Order could not be saved.");
   };
 
-  const finalizePaidOrder = async (paymentInfo = null) => {
-    const readiness = validateCheckoutReadiness();
-    if (!readiness.ok) {
-      return {
-        ...readiness,
-        message: cartMessage || authError || "Please complete checkout details before payment.",
-      };
+  const finalizePaidOrder = async (paymentInfo = null, orderData = null) => {
+    // When payment is already confirmed (money taken), skip validation — order MUST be saved
+    const isConfirmedPayment = paymentInfo?.status === "paid";
+
+    if (!isConfirmedPayment) {
+      const readiness = validateCheckoutReadiness();
+      if (!readiness.ok) {
+        return {
+          ...readiness,
+          message: cartMessage || authError || "Please complete checkout details before payment.",
+        };
+      }
     }
 
-    const orderState = buildOrderState(cartItems, cartSubtotal, shippingDetails, paymentInfo, getProductById);
+    // Use snapshot data if provided (captured before Razorpay opened), else current state
+    const effectiveItems = orderData?.items || cartItems;
+    const effectiveSubtotal = orderData?.subtotal ?? cartSubtotal;
+    const effectiveShipping = orderData?.shipping || shippingDetails;
+
+    const orderState = buildOrderState(effectiveItems, effectiveSubtotal, effectiveShipping, paymentInfo, getProductById);
 
     try {
       if (!isSupabaseConfigured || !supabase || !authUser?.id) {
         const message = "Order service is not configured.";
         setCartMessage(message);
-        return { requiresAuth: false, ok: false, message };
+        return { requiresAuth: !authUser, ok: false, message };
       }
+
+      // Refresh auth session before DB write — critical for mobile where tab was backgrounded
+      try { await supabase.auth.getSession(); } catch {}
 
       await saveSupabaseOrder(orderState);
 
@@ -742,7 +755,7 @@ export function ShopProvider({ children }) {
       } catch {}
 
       setCartItems([]);
-      await updateProfileAddressDetails(shippingDetails);
+      await updateProfileAddressDetails(effectiveShipping);
       const message = "Order placed successfully. We will contact you soon.";
       setCartMessage(message);
       return { requiresAuth: false, ok: true, message };

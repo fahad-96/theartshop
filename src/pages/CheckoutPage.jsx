@@ -100,7 +100,7 @@ export default function CheckoutPage() {
     try {
       const pending = sessionStorage.getItem(PENDING_PAYMENT_KEY);
       if (!pending) return;
-      const { orderId, paymentId, timestamp } = JSON.parse(pending);
+      const { orderId, paymentId, timestamp, orderSnapshot: savedSnapshot } = JSON.parse(pending);
       const age = Date.now() - timestamp;
       sessionStorage.removeItem(PENDING_PAYMENT_KEY);
       if (orderId && paymentId && age < 300_000) {
@@ -110,7 +110,7 @@ export default function CheckoutPage() {
         setIsPaying(true);
         setPaymentPhase("finalizing");
         withTimeout(
-          finalizePaidOrder({ provider: "razorpay", status: "paid", razorpayOrderId: orderId, razorpayPaymentId: paymentId }),
+          finalizePaidOrder({ provider: "razorpay", status: "paid", razorpayOrderId: orderId, razorpayPaymentId: paymentId }, savedSnapshot || null),
           FINALIZE_TIMEOUT_MS,
           "Order finalization timed out."
         ).then((fin) => {
@@ -243,8 +243,15 @@ export default function CheckoutPage() {
       const data = await parseJsonResponse(res, "Payment server is not reachable.");
       if (!res.ok || !data?.ok) throw new Error(data?.message || "Failed to create order.");
 
+      // Snapshot order data NOW — this closure survives mobile tab suspension
+      const orderSnapshot = {
+        items: cartItems.map((item) => ({ ...item })),
+        subtotal: cartSubtotal,
+        shipping: { ...(selectedAddr || shippingDetails) },
+      };
+
       // Store pending payment info so we can recover if the page reloads (mobile UPI flow)
-      try { sessionStorage.setItem(PENDING_PAYMENT_KEY, JSON.stringify({ orderId: data.order.id, timestamp: Date.now() })); } catch {}
+      try { sessionStorage.setItem(PENDING_PAYMENT_KEY, JSON.stringify({ orderId: data.order.id, timestamp: Date.now(), orderSnapshot })); } catch {}
 
       setPaymentPhase("awaiting");
       const razorpay = new window.Razorpay({
@@ -261,7 +268,7 @@ export default function CheckoutPage() {
 
           try {
             // Save recovery info in case page dies during finalization
-            try { sessionStorage.setItem(PENDING_PAYMENT_KEY, JSON.stringify({ orderId: result.razorpay_order_id, paymentId: result.razorpay_payment_id, timestamp: Date.now() })); } catch {}
+            try { sessionStorage.setItem(PENDING_PAYMENT_KEY, JSON.stringify({ orderId: result.razorpay_order_id, paymentId: result.razorpay_payment_id, timestamp: Date.now(), orderSnapshot })); } catch {}
 
             // 1. Verify signature (best-effort — Razorpay already confirmed payment)
             setPaymentPhase("verifying");
@@ -291,7 +298,7 @@ export default function CheckoutPage() {
             for (let attempt = 0; attempt < 3; attempt++) {
               try {
                 fin = await withTimeout(
-                  finalizePaidOrder({ provider: "razorpay", status: "paid", razorpayOrderId: result.razorpay_order_id, razorpayPaymentId: result.razorpay_payment_id }),
+                  finalizePaidOrder({ provider: "razorpay", status: "paid", razorpayOrderId: result.razorpay_order_id, razorpayPaymentId: result.razorpay_payment_id }, orderSnapshot),
                   FINALIZE_TIMEOUT_MS,
                   "Order finalization timed out."
                 );
