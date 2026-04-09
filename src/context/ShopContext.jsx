@@ -155,16 +155,18 @@ export function ShopProvider({ children }) {
       const rowsWithResolvedImages = await Promise.all(
         (data || []).map(async (row) => {
           const imageUrl = String(row?.image_url || "").trim();
+          const imagePath = String(row?.image_path || "").trim();
           const fromPublicPath = "/storage/v1/object/public/product-images/";
+
+          // If image_path is a plain filename (no slashes), it's a local public/image/ file — skip storage signing
+          const isLocalFile = imagePath && !imagePath.includes("/") && imagePath.includes(".");
+          if (isLocalFile && !imageUrl) return row;
 
           let objectPath = "";
           if (imageUrl.includes(fromPublicPath)) {
             objectPath = imageUrl.split(fromPublicPath)[1] || "";
-          } else {
-            const imagePath = String(row?.image_path || "").trim();
-            if (imagePath && !imagePath.startsWith("http://") && !imagePath.startsWith("https://") && !imagePath.startsWith("/")) {
-              objectPath = imagePath.replace(/^\/+/, "");
-            }
+          } else if (imagePath && !imagePath.startsWith("http://") && !imagePath.startsWith("https://") && !imagePath.startsWith("/") && !isLocalFile) {
+            objectPath = imagePath.replace(/^\/+/, "");
           }
 
           if (!objectPath) return row;

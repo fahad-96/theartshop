@@ -419,11 +419,15 @@ export const seedHardcodedProducts = async (supabase, hardcodedProducts) => {
 
     if (existing) continue;
 
+    // Extract just the filename from src (e.g. "/image/standing%20Cat.jpeg" → "standing Cat.jpeg")
+    const rawSrc = product.src || product.imagePath || "";
+    const filenameOnly = decodeURIComponent(rawSrc.split("/").pop() || "art.jpeg");
+
     const payload = {
       slug,
       title: product.title,
-      image_path: product.src || "",
-      image_url: product.src || "",
+      image_path: filenameOnly,
+      image_url: "",
       image_gallery: [],
       category: product.category || "Art",
       info: product.info || "",

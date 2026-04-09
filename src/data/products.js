@@ -119,12 +119,17 @@ export const WHATSAPP_PHONE = "+916006448855";
 
 export const resolveProductImageSrc = (imagePath) => {
   if (!imagePath) return `${BASE_URL}image/art.jpeg`;
-  if (imagePath.startsWith("http://") || imagePath.startsWith("https://") || imagePath.startsWith("/")) {
+  // Clean up previously-stored paths with wrong base URLs (e.g. /theartshop/image/X.jpeg)
+  const localImageMatch = imagePath.match(/(?:^|\/)image\/(.+)$/);
+  if (localImageMatch) {
+    return `${BASE_URL}image/${localImageMatch[1]}`;
+  }
+  if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
     return imagePath;
   }
 
   // If path looks like a storage object key, build a public storage URL.
-  if ((imagePath.includes("/") || imagePath.includes(".")) && SUPABASE_URL) {
+  if (imagePath.includes("/") && SUPABASE_URL) {
     const normalized = imagePath.replace(/^\/+/, "");
     return `${SUPABASE_URL}/storage/v1/object/public/product-images/${normalized}`;
   }
