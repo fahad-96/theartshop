@@ -365,6 +365,11 @@ export const applyCoupon = async (supabase, couponCode, cartTotal) => {
   
   if (!data.active) throw new Error('Coupon is inactive');
   if (data.max_uses && data.current_uses >= data.max_uses) throw new Error('Coupon limit reached');
+  
+  const now = new Date();
+  if (data.valid_from && new Date(data.valid_from) > now) throw new Error('Coupon is not yet active');
+  if (data.valid_until && new Date(data.valid_until) < now) throw new Error('Coupon has expired');
+  
   if (cartTotal < data.minimum_purchase) {
     throw new Error(`Minimum purchase of ₹${data.minimum_purchase} required`);
   }
@@ -377,9 +382,63 @@ export const applyCoupon = async (supabase, couponCode, cartTotal) => {
   }
 
   return {
+    id: data.id,
     code: data.code,
     discount: Math.min(discount, cartTotal),
     discountType: data.discount_type,
     discountValue: data.discount_value,
   };
+};
+
+export const incrementCouponUsage = async (supabase, couponId) => {
+  const { error } = await supabase.rpc("increment_coupon_usage", { coupon_id: couponId });
+  if (error) {
+    // Fallback: manual increment
+    const { data } = await supabase.from("coupons").select("current_uses").eq("id", couponId).single();
+    if (data) {
+      await supabase.from("coupons").update({ current_uses: (data.current_uses || 0) + 1 }).eq("id", couponId);
+    }
+  }
+};
+
+export const seedHardcodedProducts = async (supabase, hardcodedProducts) => {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+  const user = sessionData.session?.user;
+  if (!user) throw new Error("Not authenticated");
+
+  let seeded = 0;
+  for (const product of hardcodedProducts) {
+    const slug = product.slug;
+    // Check if already exists
+    const { data: existing } = await supabase
+      .from("products")
+      .select("id")
+      .eq("slug", slug)
+      .maybeSingle();
+
+    if (existing) continue;
+
+    const payload = {
+      slug,
+      title: product.title,
+      image_path: product.src || "",
+      image_url: product.src || "",
+      image_gallery: [],
+      category: product.category || "Art",
+      info: product.info || "",
+      short_info: product.shortInfo || "",
+      pricing: product.pricing || { S: 599, L: 999, XL: 1499 },
+      sort_order: Number(product.id || 0),
+      is_active: true,
+      publish_status: "published",
+      created_by: user.id,
+      updated_by: user.id,
+    };
+
+    const { error } = await supabase.from("products").insert(payload);
+    if (!error) seeded++;
+  }
+
+  return seeded;
 };

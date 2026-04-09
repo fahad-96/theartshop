@@ -5,6 +5,8 @@ import MainHeader from "../components/MainHeader";
 import MapboxAddressInput from "../components/MapboxAddressInput";
 import { useShop } from "../context/ShopContext";
 import { sizeDimensions } from "../data/products";
+import { applyCoupon } from "../lib/adminApi";
+import { supabase } from "../lib/supabaseClient";
 
 const ADDRESS_BOOK_STORAGE_KEY_PREFIX = "tas-address-book";
 const ADDRESS_SYNC_TIMEOUT_MS = 6000;
@@ -32,6 +34,10 @@ export default function CheckoutPage() {
   const [savingAddress, setSavingAddress] = useState(false);
   const [addressForm, setAddressForm] = useState({ fullName: "", phone: "", landmark: "", pincode: "", address: "" });
   const [continuing, setContinuing] = useState(false);
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponError, setCouponError] = useState("");
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
 
   const {
     authUser, authReady, cartItems, cartSubtotal, getProductById,
@@ -131,10 +137,34 @@ export default function CheckoutPage() {
             price: product?.pricing?.[item.size] || 0,
           };
         }),
-        subtotal: cartSubtotal,
+        subtotal: appliedCoupon ? cartSubtotal - appliedCoupon.discount : cartSubtotal,
+        originalSubtotal: cartSubtotal,
+        coupon: appliedCoupon || null,
         shipping: { ...addr },
       },
     });
+  };
+
+  const onApplyCoupon = async () => {
+    if (!couponCode.trim()) return;
+    setApplyingCoupon(true);
+    setCouponError("");
+    try {
+      const result = await applyCoupon(supabase, couponCode.trim().toUpperCase(), cartSubtotal);
+      setAppliedCoupon(result);
+      setCouponError("");
+    } catch (err) {
+      setCouponError(err.message || "Invalid coupon");
+      setAppliedCoupon(null);
+    } finally {
+      setApplyingCoupon(false);
+    }
+  };
+
+  const onRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponCode("");
+    setCouponError("");
   };
 
   const selectedAddr = addressBook[selectedAddressIndex];
@@ -259,10 +289,45 @@ export default function CheckoutPage() {
                 <p className="text-xs text-white/50 mt-1">{selectedAddr?.address}</p>
               </div>
 
+              {/* Coupon Code */}
+              <div className="border border-white/10 rounded-sm p-3 sm:p-4 mb-4 sm:mb-6">
+                <p className="text-[10px] uppercase tracking-[0.25em] text-white/40 mb-2">Have a coupon?</p>
+                {appliedCoupon ? (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-sm font-bold text-emerald-400">{appliedCoupon.code}</span>
+                      <span className="text-xs text-white/50 ml-2">
+                        {appliedCoupon.discountType === "percentage" ? `${appliedCoupon.discountValue}% off` : `₹${appliedCoupon.discountValue} off`}
+                      </span>
+                      <span className="text-xs text-emerald-400 ml-2">−₹{appliedCoupon.discount.toFixed(0)}</span>
+                    </div>
+                    <button type="button" onClick={onRemoveCoupon} className="text-xs text-rose-400 hover:text-rose-300 uppercase tracking-wider">Remove</button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())} placeholder="Enter coupon code" className="flex-1 bg-transparent border border-white/15 rounded-sm px-3 py-2.5 text-sm outline-none focus:border-white/50 transition-colors placeholder:text-white/25 uppercase tracking-wider" />
+                    <button type="button" onClick={onApplyCoupon} disabled={applyingCoupon || !couponCode.trim()} className="bg-white text-black rounded-sm px-4 py-2.5 text-xs uppercase tracking-[0.15em] font-bold active:scale-[0.98] transition-transform disabled:opacity-40">{applyingCoupon ? "..." : "Apply"}</button>
+                  </div>
+                )}
+                {couponError && <p className="text-xs text-rose-400 mt-2">{couponError}</p>}
+              </div>
+
               {/* Total */}
-              <div className="flex items-end justify-between border border-white/10 rounded-sm p-3 sm:p-4 mb-6 sm:mb-8">
-                <p className="text-xs uppercase tracking-[0.2em] text-white/50">Total</p>
-                <p className="text-2xl sm:text-3xl font-black">₹{cartSubtotal}</p>
+              <div className="border border-white/10 rounded-sm p-3 sm:p-4 mb-6 sm:mb-8">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs uppercase tracking-[0.2em] text-white/50">Subtotal</p>
+                  <p className="text-sm text-white/60">₹{cartSubtotal}</p>
+                </div>
+                {appliedCoupon && (
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-400">Discount ({appliedCoupon.code})</p>
+                    <p className="text-sm text-emerald-400">−₹{appliedCoupon.discount.toFixed(0)}</p>
+                  </div>
+                )}
+                <div className="flex items-end justify-between pt-2 border-t border-white/10 mt-2">
+                  <p className="text-xs uppercase tracking-[0.2em] text-white/50">Total</p>
+                  <p className="text-2xl sm:text-3xl font-black">₹{appliedCoupon ? (cartSubtotal - appliedCoupon.discount).toFixed(0) : cartSubtotal}</p>
+                </div>
               </div>
 
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4">

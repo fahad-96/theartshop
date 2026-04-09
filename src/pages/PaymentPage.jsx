@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import MainHeader from "../components/MainHeader";
 import { useShop } from "../context/ShopContext";
 import { supabase, isSupabaseConfigured } from "../lib/supabaseClient";
+import { incrementCouponUsage } from "../lib/adminApi";
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
 const PAYMENT_API_TIMEOUT_MS = 20000;
@@ -314,6 +315,9 @@ export default function PaymentPage() {
 
       if (saved) {
         clearPendingPayment();
+        if (pending.snapshot?.coupon?.id) {
+          incrementCouponUsage(supabase, pending.snapshot.coupon.id).catch(() => {});
+        }
         clearCart();
         navigate("/order-success", { replace: true });
         sendEmailNotification(pending.orderRef, pending.snapshot, paymentPayload, pending.email);
@@ -438,6 +442,9 @@ export default function PaymentPage() {
 
             if (saved) {
               clearPendingPayment();
+              if (snap?.coupon?.id) {
+                incrementCouponUsage(supabase, snap.coupon.id).catch(() => {});
+              }
               clearCart();
               navigate("/order-success", { replace: true });
               sendEmailNotification(ref, snap, paymentPayload, authUser?.email);

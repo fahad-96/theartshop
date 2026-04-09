@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useShop } from "../context/ShopContext";
-import { mapProductRowToProduct, slugifyProductTitle } from "../data/products";
+import { mapProductRowToProduct, products as hardcodedProducts, slugifyProductTitle } from "../data/products";
 import { supabase } from "../lib/supabaseClient";
 import {
   banCustomer,
@@ -19,6 +19,7 @@ import {
   isAdminUser,
   saveAdminCoupon,
   saveAdminProduct,
+  seedHardcodedProducts,
   unbanCustomer,
   updateAdminOrderStatus,
   updateReviewStatus,
@@ -93,10 +94,11 @@ export default function AdminDashboardPage() {
   const [customerLoading, setCustomerLoading] = useState(false);
 
   const [coupons, setCoupons] = useState([]);
-  const [couponForm, setCouponForm] = useState({ code: "", discount_type: "percentage", discount_value: 10, minimum_purchase: 0, max_uses: 0, active: true });
+  const [couponForm, setCouponForm] = useState({ code: "", discount_type: "percentage", discount_value: 10, minimum_purchase: 0, max_uses: 0, active: true, valid_from: "", valid_until: "" });
   const [editingCouponId, setEditingCouponId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [productsSubTab, setProductsSubTab] = useState("catalog");
   const notifRef = useRef(null);
 
   const NOTIF_LS_KEY = "admin_orders_last_seen";
@@ -143,11 +145,14 @@ export default function AdminDashboardPage() {
   }, [productForm.imageFiles]);
 
   const stats = useMemo(() => {
-    const totalSales = orders.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+    const nonCancelledOrders = orders.filter((row) => String(row.status).toLowerCase() !== "cancelled");
+    const totalSales = nonCancelledOrders.reduce((sum, row) => sum + Number(row.amount || 0), 0);
     const paidOrders = orders.filter((row) => String(row.status).toLowerCase() === "paid").length;
+    const deliveredOrders = orders.filter((row) => String(row.status).toLowerCase() === "delivered").length;
     const pendingOrders = orders.filter((row) => ["placed", "processing", "pending"].includes(String(row.status).toLowerCase())).length;
+    const cancelledOrders = orders.filter((row) => String(row.status).toLowerCase() === "cancelled").length;
     const activeProducts = products.filter((row) => row.isActive !== false && row.publishStatus === "published").length;
-    return { totalSales, totalOrders: orders.length, paidOrders, pendingOrders, activeProducts };
+    return { totalSales, totalOrders: orders.length, paidOrders, deliveredOrders, pendingOrders, cancelledOrders, activeProducts };
   }, [orders, products]);
 
   const syncAdmin = async (opts = {}) => {
@@ -361,8 +366,43 @@ export default function AdminDashboardPage() {
       await updateAdminOrderStatus(supabase, orderId, status);
       await refreshOrders();
       setFlash("Order status updated.", "success");
+
+      // Send email notification to customer
+      const order = orders.find((o) => o.dbId === orderId);
+      if (order?.shipping?.email) {
+        try {
+          const notifyUrl = (import.meta.env.VITE_API_BASE_URL || "") + "/api/notify/order-status";
+          await fetch(notifyUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              orderRef: order.order_ref || order.dbId,
+              status,
+              email: order.shipping.email,
+              customerName: order.shipping?.fullName || "",
+              amount: order.amount,
+              items: order.items,
+            }),
+          });
+        } catch { /* email is best-effort */ }
+      }
     } catch (error) {
       setFlash(error.message || "Could not update order status.", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onSeedProducts = async () => {
+    if (!window.confirm(`This will import ${hardcodedProducts.length} default products into the database. Products with matching slugs will be skipped. Continue?`)) return;
+    setSaving(true);
+    try {
+      const count = await seedHardcodedProducts(supabase, hardcodedProducts);
+      await refreshProducts();
+      await refreshProductsList();
+      setFlash(`Seeded ${count} new products. (${hardcodedProducts.length - count} already existed)`, "success");
+    } catch (error) {
+      setFlash(error.message || "Could not seed products.", "error");
     } finally {
       setSaving(false);
     }
@@ -473,16 +513,22 @@ export default function AdminDashboardPage() {
   };
 
   const resetCouponForm = () => {
-    setCouponForm({ code: "", discount_type: "percentage", discount_value: 10, minimum_purchase: 0, max_uses: 0, active: true });
+    setCouponForm({ code: "", discount_type: "percentage", discount_value: 10, minimum_purchase: 0, max_uses: 0, active: true, valid_from: "", valid_until: "" });
     setEditingCouponId(null);
   };
 
   const onSaveCoupon = async (e) => {
     e.preventDefault();
     if (!couponForm.code.trim()) { setFlash("Coupon code is required.", "error"); return; }
+    if (!couponForm.valid_from || !couponForm.valid_until) { setFlash("Valid from and valid until dates are required.", "error"); return; }
     setSaving(true);
     try {
-      const payload = { ...couponForm, code: couponForm.code.trim().toUpperCase() };
+      const payload = {
+        ...couponForm,
+        code: couponForm.code.trim().toUpperCase(),
+        valid_from: new Date(couponForm.valid_from).toISOString(),
+        valid_until: new Date(couponForm.valid_until).toISOString(),
+      };
       if (editingCouponId) payload.id = editingCouponId;
       await saveAdminCoupon(supabase, payload);
       await refreshCoupons();
@@ -496,7 +542,16 @@ export default function AdminDashboardPage() {
   };
 
   const onEditCoupon = (coupon) => {
-    setCouponForm({ code: coupon.code, discount_type: coupon.discount_type, discount_value: coupon.discount_value, minimum_purchase: coupon.minimum_purchase || 0, max_uses: coupon.max_uses || 0, active: coupon.active });
+    setCouponForm({
+      code: coupon.code,
+      discount_type: coupon.discount_type,
+      discount_value: coupon.discount_value,
+      minimum_purchase: coupon.minimum_purchase || 0,
+      max_uses: coupon.max_uses || 0,
+      active: coupon.active,
+      valid_from: coupon.valid_from ? new Date(coupon.valid_from).toISOString().slice(0, 16) : "",
+      valid_until: coupon.valid_until ? new Date(coupon.valid_until).toISOString().slice(0, 16) : "",
+    });
     setEditingCouponId(coupon.id);
   };
 
@@ -696,9 +751,9 @@ export default function AdminDashboardPage() {
                 {[
                   { label: "Revenue", value: `₹${stats.totalSales.toFixed(0)}`, color: "emerald" },
                   { label: "Total Orders", value: stats.totalOrders, color: "sky" },
-                  { label: "Paid", value: stats.paidOrders, color: "violet" },
+                  { label: "Delivered", value: stats.deliveredOrders, color: "violet" },
                   { label: "Pending", value: stats.pendingOrders, color: "amber" },
-                  { label: "Products", value: stats.activeProducts, color: "pink" },
+                  { label: "Cancelled", value: stats.cancelledOrders, color: "rose" },
                 ].map((s) => (
                   <div key={s.label} className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 hover:bg-white/[0.05] transition-colors">
                     <p className="text-[11px] text-white/40 uppercase tracking-wider font-medium">{s.label}</p>
@@ -751,59 +806,15 @@ export default function AdminDashboardPage() {
                 <p className="mt-1 text-sm text-white/45">Manage your catalog, draft/publish workflow.</p>
               </div>
 
-              <div className="grid grid-cols-1 xl:grid-cols-[380px_1fr] gap-5">
-                {/* Product Form */}
-                <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-5">
-                  <h3 className="text-base font-semibold">{productForm.id ? "Edit Product" : "New Product"}</h3>
-                  <form onSubmit={onSaveProduct} className="mt-4 space-y-3">
-                    <AdminInput value={productForm.title} onChange={(v) => setProductForm((p) => ({ ...p, title: v }))} placeholder="Product title" />
-                    <AdminInput value={productForm.slug} onChange={(v) => setProductForm((p) => ({ ...p, slug: v }))} placeholder="Slug (auto-generated)" />
-                    <AdminInput value={productForm.imageUrl} onChange={(v) => setProductForm((p) => ({ ...p, imageUrl: v }))} placeholder="Primary image URL" />
-                    <AdminInput value={productForm.imagePath} onChange={(v) => setProductForm((p) => ({ ...p, imagePath: v }))} placeholder="Or storage path" />
-                    <input type="file" accept="image/*" multiple onChange={(e) => setProductForm((p) => ({ ...p, imageFiles: Array.from(e.target.files || []) }))} className="w-full text-sm text-white/60 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border file:border-white/10 file:text-white/70 file:bg-white/[0.04] file:text-xs file:uppercase file:tracking-wider file:cursor-pointer" />
+              {/* Sub-tabs */}
+              <div className="flex gap-2 mb-5">
+                <button type="button" onClick={() => setProductsSubTab("catalog")} className={`px-4 py-2 rounded-lg text-xs uppercase tracking-wider font-semibold transition-all ${productsSubTab === "catalog" ? "bg-white text-black" : "border border-white/10 text-white/60 hover:bg-white/[0.04]"}`}>Catalog</button>
+                <button type="button" onClick={() => setProductsSubTab("add")} className={`px-4 py-2 rounded-lg text-xs uppercase tracking-wider font-semibold transition-all ${productsSubTab === "add" ? "bg-white text-black" : "border border-white/10 text-white/60 hover:bg-white/[0.04]"}`}>{productForm.id ? "Edit Product" : "Add Product"}</button>
+                <button type="button" onClick={onSeedProducts} disabled={saving} className="ml-auto px-4 py-2 rounded-lg text-xs uppercase tracking-wider font-semibold border border-amber-500/20 text-amber-400 hover:bg-amber-500/[0.06] disabled:opacity-30 transition-colors">Import Default Products</button>
+              </div>
 
-                    <div className="grid grid-cols-3 gap-2">
-                      <AdminInput type="number" value={productForm.priceS} onChange={(v) => setProductForm((p) => ({ ...p, priceS: v }))} placeholder="S ₹" />
-                      <AdminInput type="number" value={productForm.priceL} onChange={(v) => setProductForm((p) => ({ ...p, priceL: v }))} placeholder="L ₹" />
-                      <AdminInput type="number" value={productForm.priceXL} onChange={(v) => setProductForm((p) => ({ ...p, priceXL: v }))} placeholder="XL ₹" />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <AdminSelect value={productForm.publishStatus} onChange={(v) => setProductForm((p) => ({ ...p, publishStatus: v }))} options={[["draft","Draft"],["published","Published"]]} />
-                      <AdminSelect value={productForm.isActive ? "active" : "inactive"} onChange={(v) => setProductForm((p) => ({ ...p, isActive: v === "active" }))} options={[["active","Active"],["inactive","Inactive"]]} />
-                    </div>
-
-                    <AdminTextarea value={productForm.shortInfo} onChange={(v) => setProductForm((p) => ({ ...p, shortInfo: v }))} placeholder="Short description" rows={2} />
-                    <AdminTextarea value={productForm.info} onChange={(v) => setProductForm((p) => ({ ...p, info: v }))} placeholder="Full description" rows={3} />
-
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      <button disabled={saving} className="bg-white text-black px-4 py-2 rounded-lg text-xs uppercase tracking-wider font-bold hover:bg-white/90 transition-colors disabled:opacity-50">{saving ? "Saving..." : "Save"}</button>
-                      <button type="button" onClick={resetProductForm} className="border border-white/10 text-white/60 px-4 py-2 rounded-lg text-xs uppercase tracking-wider hover:bg-white/[0.04]">Reset</button>
-                    </div>
-                  </form>
-
-                  {/* Preview */}
-                  <div className="mt-5 pt-5 border-t border-white/[0.06]">
-                    <p className="text-[11px] uppercase tracking-wider text-white/30 font-medium mb-3">Preview</p>
-                    <div className="rounded-lg border border-white/[0.06] overflow-hidden bg-black/30">
-                      <div className="aspect-[4/3] bg-black/40 flex items-center justify-center">
-                        {draftPreviewUrl ? (
-                          <img src={draftPreviewUrl} alt="" className="h-full w-full object-cover" />
-                        ) : productForm.imageUrl.trim() ? (
-                          <img src={productForm.imageUrl.trim()} alt="" className="h-full w-full object-cover" />
-                        ) : (
-                          <p className="text-sm text-white/30">No image</p>
-                        )}
-                      </div>
-                      <div className="p-4">
-                        <p className="font-semibold text-sm">{productForm.title || "Untitled"}</p>
-                        <p className="text-xs text-white/50 mt-1 line-clamp-2">{productForm.shortInfo || "No description"}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Product Table */}
+              {/* Catalog sub-tab */}
+              {productsSubTab === "catalog" && (
                 <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-5">
                   <div className="flex flex-wrap gap-3 items-center justify-between mb-4">
                     <h3 className="text-base font-semibold">Catalog ({products.length})</h3>
@@ -843,19 +854,79 @@ export default function AdminDashboardPage() {
                             <td className="p-3"><StatusBadge status={p.publishStatus} /> <span className={`ml-1 text-[10px] ${p.isActive ? "text-emerald-400" : "text-white/30"}`}>{p.isActive ? "●" : "○"}</span></td>
                             <td className="p-3">
                               <div className="flex gap-1.5">
-                                <SmallBtn onClick={() => onEditProduct(p)}>Edit</SmallBtn>
+                                <SmallBtn onClick={() => { onEditProduct(p); setProductsSubTab("add"); }}>Edit</SmallBtn>
                                 <SmallBtn onClick={() => saveAdminProduct(supabase, { id: p.dbId, publish_status: p.publishStatus === "published" ? "draft" : "published" }).then(refreshProductsList)} color="sky">{p.publishStatus === "published" ? "Unpublish" : "Publish"}</SmallBtn>
                                 <SmallBtn onClick={() => onDeleteProduct(p.dbId)} color="rose">Delete</SmallBtn>
                               </div>
                             </td>
                           </tr>
                         ))}
-                        {!products.length && <tr><td colSpan={4} className="p-8 text-center text-white/30">No products.</td></tr>}
+                        {!products.length && <tr><td colSpan={4} className="p-8 text-center text-white/30">No products. Click "Import Default Products" to load the default catalog.</td></tr>}
                       </tbody>
                     </table>
                   </div>
                 </div>
-              </div>
+              )}
+
+              {/* Add/Edit Product sub-tab */}
+              {productsSubTab === "add" && (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+                  <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-5">
+                    <h3 className="text-base font-semibold">{productForm.id ? "Edit Product" : "New Product"}</h3>
+                    <form onSubmit={onSaveProduct} className="mt-4 space-y-3">
+                      <AdminInput value={productForm.title} onChange={(v) => setProductForm((p) => ({ ...p, title: v }))} placeholder="Product title" />
+                      <AdminInput value={productForm.slug} onChange={(v) => setProductForm((p) => ({ ...p, slug: v }))} placeholder="Slug (auto-generated)" />
+                      <AdminInput value={productForm.imageUrl} onChange={(v) => setProductForm((p) => ({ ...p, imageUrl: v }))} placeholder="Primary image URL" />
+                      <AdminInput value={productForm.imagePath} onChange={(v) => setProductForm((p) => ({ ...p, imagePath: v }))} placeholder="Or storage path" />
+                      <input type="file" accept="image/*" multiple onChange={(e) => setProductForm((p) => ({ ...p, imageFiles: Array.from(e.target.files || []) }))} className="w-full text-sm text-white/60 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border file:border-white/10 file:text-white/70 file:bg-white/[0.04] file:text-xs file:uppercase file:tracking-wider file:cursor-pointer" />
+
+                      <div className="grid grid-cols-3 gap-2">
+                        <AdminInput type="number" value={productForm.priceS} onChange={(v) => setProductForm((p) => ({ ...p, priceS: v }))} placeholder="S ₹" />
+                        <AdminInput type="number" value={productForm.priceL} onChange={(v) => setProductForm((p) => ({ ...p, priceL: v }))} placeholder="L ₹" />
+                        <AdminInput type="number" value={productForm.priceXL} onChange={(v) => setProductForm((p) => ({ ...p, priceXL: v }))} placeholder="XL ₹" />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <AdminSelect value={productForm.publishStatus} onChange={(v) => setProductForm((p) => ({ ...p, publishStatus: v }))} options={[["draft","Draft"],["published","Published"]]} />
+                        <AdminSelect value={productForm.isActive ? "active" : "inactive"} onChange={(v) => setProductForm((p) => ({ ...p, isActive: v === "active" }))} options={[["active","Active"],["inactive","Inactive"]]} />
+                      </div>
+
+                      <AdminTextarea value={productForm.shortInfo} onChange={(v) => setProductForm((p) => ({ ...p, shortInfo: v }))} placeholder="Short description" rows={2} />
+                      <AdminTextarea value={productForm.info} onChange={(v) => setProductForm((p) => ({ ...p, info: v }))} placeholder="Full description" rows={3} />
+
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <button disabled={saving} className="bg-white text-black px-4 py-2 rounded-lg text-xs uppercase tracking-wider font-bold hover:bg-white/90 transition-colors disabled:opacity-50">{saving ? "Saving..." : "Save"}</button>
+                        <button type="button" onClick={() => { resetProductForm(); setProductsSubTab("catalog"); }} className="border border-white/10 text-white/60 px-4 py-2 rounded-lg text-xs uppercase tracking-wider hover:bg-white/[0.04]">Cancel</button>
+                      </div>
+                    </form>
+                  </div>
+
+                  {/* Preview */}
+                  <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-5">
+                    <p className="text-[11px] uppercase tracking-wider text-white/30 font-medium mb-3">Preview</p>
+                    <div className="rounded-lg border border-white/[0.06] overflow-hidden bg-black/30">
+                      <div className="aspect-[4/3] bg-black/40 flex items-center justify-center">
+                        {draftPreviewUrl ? (
+                          <img src={draftPreviewUrl} alt="" className="h-full w-full object-cover" />
+                        ) : productForm.imageUrl.trim() ? (
+                          <img src={productForm.imageUrl.trim()} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <p className="text-sm text-white/30">No image</p>
+                        )}
+                      </div>
+                      <div className="p-4">
+                        <p className="font-semibold text-sm">{productForm.title || "Untitled"}</p>
+                        <p className="text-xs text-white/50 mt-1 line-clamp-2">{productForm.shortInfo || "No description"}</p>
+                        <div className="flex gap-3 mt-3 text-xs text-white/40">
+                          <span>S: ₹{productForm.priceS}</span>
+                          <span>L: ₹{productForm.priceL}</span>
+                          <span>XL: ₹{productForm.priceXL}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </section>
           )}
 
@@ -870,8 +941,8 @@ export default function AdminDashboardPage() {
               <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-5">
                 <AdminInput value={orderSearch} onChange={setOrderSearch} placeholder="Search order ref..." className="col-span-2 md:col-span-1" />
                 <AdminSelect value={orderStatusFilter} onChange={setOrderStatusFilter} options={[["all","All status"],["Placed","Placed"],["Processing","Processing"],["Shipped","Shipped"],["Delivered","Delivered"],["Cancelled","Cancelled"]]} />
-                <input type="date" value={orderDateFrom} onChange={(e) => setOrderDateFrom(e.target.value)} className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-white/20" />
-                <input type="date" value={orderDateTo} onChange={(e) => setOrderDateTo(e.target.value)} className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-white/20" />
+                <input type="date" value={orderDateFrom} onChange={(e) => setOrderDateFrom(e.target.value)} className="bg-[#1a1a1c] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-white/20" />
+                <input type="date" value={orderDateTo} onChange={(e) => setOrderDateTo(e.target.value)} className="bg-[#1a1a1c] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-white/20" />
                 <button type="button" onClick={refreshOrders} className="border border-white/10 px-4 py-2 rounded-lg text-xs uppercase tracking-wider text-white/60 hover:bg-white/[0.04]">Filter</button>
               </div>
 
@@ -900,8 +971,8 @@ export default function AdminDashboardPage() {
                           <td className="p-3"><StatusBadge status={o.status} /></td>
                           <td className="p-3" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-1.5">
-                              <select value={orderDrafts[o.dbId] || o.status} onChange={(e) => setOrderDrafts((prev) => ({ ...prev, [o.dbId]: e.target.value }))} className="bg-white/[0.04] border border-white/[0.08] rounded-md px-2 py-1 text-xs outline-none">
-                                {["Placed","Processing","Shipped","Delivered","Cancelled"].map((s) => <option key={s}>{s}</option>)}
+                              <select value={orderDrafts[o.dbId] || o.status} onChange={(e) => setOrderDrafts((prev) => ({ ...prev, [o.dbId]: e.target.value }))} className="bg-[#1a1a1c] border border-white/[0.08] rounded-md px-2 py-1 text-xs text-white outline-none" style={{ colorScheme: 'dark' }}>
+                                {["Placed","Processing","Shipped","Delivered","Cancelled"].map((s) => <option key={s} style={{ backgroundColor: '#1a1a1c', color: '#fff' }}>{s}</option>)}
                               </select>
                               <SmallBtn onClick={() => onUpdateOrderStatus(o.dbId)}>Save</SmallBtn>
                             </div>
@@ -1157,6 +1228,16 @@ export default function AdminDashboardPage() {
                       <AdminInput type="number" value={couponForm.minimum_purchase} onChange={(v) => setCouponForm((p) => ({ ...p, minimum_purchase: Number(v) }))} placeholder="Min purchase ₹" />
                       <AdminInput type="number" value={couponForm.max_uses} onChange={(v) => setCouponForm((p) => ({ ...p, max_uses: Number(v) }))} placeholder="Max uses (0=∞)" />
                     </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] text-white/40 uppercase tracking-wider mb-1">Valid From</label>
+                        <input type="datetime-local" value={couponForm.valid_from} onChange={(e) => setCouponForm((p) => ({ ...p, valid_from: e.target.value }))} className="w-full bg-[#1a1a1c] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-white/20" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-white/40 uppercase tracking-wider mb-1">Valid Until</label>
+                        <input type="datetime-local" value={couponForm.valid_until} onChange={(e) => setCouponForm((p) => ({ ...p, valid_until: e.target.value }))} className="w-full bg-[#1a1a1c] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-white/20" />
+                      </div>
+                    </div>
                     <AdminSelect value={couponForm.active ? "active" : "inactive"} onChange={(v) => setCouponForm((p) => ({ ...p, active: v === "active" }))} options={[["active","Active"],["inactive","Inactive"]]} />
                     <div className="flex gap-2 pt-1">
                       <button disabled={saving} className="bg-white text-black px-4 py-2 rounded-lg text-xs uppercase tracking-wider font-bold hover:bg-white/90 disabled:opacity-50">{saving ? "Saving..." : "Save"}</button>
@@ -1300,9 +1381,10 @@ function AdminSelect({ value, onChange, options }) {
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-white/20 transition-colors"
+      className="w-full bg-[#1a1a1c] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-white/20 transition-colors"
+      style={{ colorScheme: 'dark' }}
     >
-      {options.map(([val, label]) => <option key={val} value={val}>{label}</option>)}
+      {options.map(([val, label]) => <option key={val} value={val} style={{ backgroundColor: '#1a1a1c', color: '#fff' }}>{label}</option>)}
     </select>
   );
 }

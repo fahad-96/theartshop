@@ -1,16 +1,18 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import MainHeader from "../components/MainHeader";
 import { useShop } from "../context/ShopContext";
 import { sizeDimensions, WHATSAPP_PHONE } from "../data/products";
+import { saveProductReview } from "../lib/adminApi";
+import { supabase } from "../lib/supabaseClient";
 
 const ease = [0.22, 1, 0.36, 1];
 
 export default function ProductPage() {
   const { productKey } = useParams();
   const navigate = useNavigate();
-  const { products, getProductById, handleBuy, setAuthError, cartItems, wishlistItems, toggleWishlist } = useShop();
+  const { products, getProductById, handleBuy, setAuthError, cartItems, wishlistItems, toggleWishlist, orders, authUser } = useShop();
   const [selectedSize, setSelectedSize] = useState("L");
 
   const product = useMemo(() => {
@@ -21,6 +23,64 @@ export default function ProductPage() {
       null
     );
   }, [getProductById, productKey, products]);
+
+  // Check if the current user has a delivered order containing this product
+  const hasDeliveredOrder = useMemo(() => {
+    if (!authUser || !product || !orders.length) return false;
+    return orders.some(
+      (o) =>
+        String(o.status).toLowerCase() === "delivered" &&
+        Array.isArray(o.items) &&
+        o.items.some((it) => String(it.title).toLowerCase() === String(product.title).toLowerCase())
+    );
+  }, [authUser, product, orders]);
+
+  // Review form state
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewTitle, setReviewTitle] = useState("");
+  const [reviewText, setReviewText] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewMsg, setReviewMsg] = useState("");
+  const [existingReview, setExistingReview] = useState(null);
+
+  // Fetch existing review for this user+product
+  useEffect(() => {
+    if (!authUser || !product?.dbId) return;
+    supabase
+      .from("customer_reviews")
+      .select("*")
+      .eq("product_id", product.dbId)
+      .eq("user_id", authUser.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setExistingReview(data);
+          setReviewRating(data.rating);
+          setReviewTitle(data.title || "");
+          setReviewText(data.review_text || "");
+        }
+      });
+  }, [authUser, product?.dbId]);
+
+  const onSubmitReview = async () => {
+    if (!product?.dbId) return;
+    setReviewSubmitting(true);
+    setReviewMsg("");
+    try {
+      await saveProductReview(supabase, product.dbId, {
+        rating: reviewRating,
+        title: reviewTitle.trim(),
+        review_text: reviewText.trim(),
+        verified_purchase: true,
+      });
+      setReviewMsg("Thank you for your review!");
+      setExistingReview({ rating: reviewRating, title: reviewTitle, review_text: reviewText });
+    } catch (err) {
+      setReviewMsg(err.message || "Could not submit review.");
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
 
   const inCart = product ? cartItems.some((item) => item.productId === product.id && item.size === selectedSize) : false;
   const inWishlist = product ? wishlistItems.includes(product.id) : false;
@@ -223,6 +283,62 @@ export default function ProductPage() {
                 </motion.div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Write a Review (for delivered orders) */}
+        {hasDeliveredOrder && (
+          <div className="border-t border-white/10 px-4 sm:px-6 md:px-10 lg:px-20 py-12 sm:py-16 bg-[#050505]">
+            <h2 className="text-[10px] sm:text-xs uppercase tracking-[0.3em] text-white/40 mb-2">
+              {existingReview ? "Update Your Review" : "Write a Review"}
+            </h2>
+            <p className="text-sm text-white/40 mb-6">We'd love to hear your thoughts on this piece!</p>
+
+            {reviewMsg && (
+              <p className={`text-sm mb-4 ${reviewMsg.includes("Thank") ? "text-emerald-400" : "text-red-400"}`}>{reviewMsg}</p>
+            )}
+
+            {/* Star rating */}
+            <div className="flex items-center gap-1 mb-4">
+              <span className="text-[10px] uppercase tracking-[0.2em] text-white/40 mr-3">Rating</span>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setReviewRating(star)}
+                  className={`text-xl transition-colors ${star <= reviewRating ? "text-amber-400" : "text-white/15"}`}
+                >
+                  ★
+                </button>
+              ))}
+            </div>
+
+            <input
+              type="text"
+              placeholder="Review title (optional)"
+              value={reviewTitle}
+              onChange={(e) => setReviewTitle(e.target.value)}
+              maxLength={120}
+              className="w-full bg-white/[0.04] border border-white/10 rounded px-4 py-3 text-sm text-white placeholder:text-white/25 mb-3 focus:outline-none focus:border-white/30"
+            />
+
+            <textarea
+              placeholder="Share your experience with this artwork…"
+              value={reviewText}
+              onChange={(e) => setReviewText(e.target.value)}
+              rows={4}
+              maxLength={1000}
+              className="w-full bg-white/[0.04] border border-white/10 rounded px-4 py-3 text-sm text-white placeholder:text-white/25 mb-4 focus:outline-none focus:border-white/30 resize-none"
+            />
+
+            <button
+              type="button"
+              onClick={onSubmitReview}
+              disabled={reviewSubmitting || !reviewText.trim()}
+              className="bg-white text-black text-[10px] uppercase tracking-[0.2em] font-bold px-8 py-3 rounded-sm hover:bg-white/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {reviewSubmitting ? "Submitting…" : existingReview ? "Update Review" : "Submit Review"}
+            </button>
           </div>
         )}
       </div>
