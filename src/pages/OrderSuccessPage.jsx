@@ -26,7 +26,7 @@ export default function OrderSuccessPage() {
 
         <h1 className="text-2xl sm:text-3xl md:text-4xl font-black uppercase tracking-tight">Order Placed</h1>
         <p className="mt-3 sm:mt-4 text-xs sm:text-sm text-white/45 leading-relaxed px-2">
-          Your artwork is on its way. We'll contact you with delivery updates soon.
+          Your artwork is on its way. You can view your order details in your profile. Thank you for shopping with us!
         </p>
 
         <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row gap-3 justify-center">
