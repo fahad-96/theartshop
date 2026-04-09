@@ -30,9 +30,9 @@ export default function OrderSuccessPage() {
         </p>
 
         <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row gap-3 justify-center">
-          <Link to="/profile" className="border border-white/20 px-6 py-3.5 text-[10px] sm:text-xs uppercase tracking-[0.2em] font-bold hover:bg-white/5 active:bg-white/10 transition-colors rounded-sm">
+          <a href="/profile#orders" className="border border-white/20 px-6 py-3.5 text-[10px] sm:text-xs uppercase tracking-[0.2em] font-bold hover:bg-white/5 active:bg-white/10 transition-colors rounded-sm">
             View Orders
-          </Link>
+          </a>
           <Link to="/" className="bg-white text-black px-6 py-3.5 text-[10px] sm:text-xs uppercase tracking-[0.2em] font-bold hover:bg-white/90 active:scale-[0.98] transition-all rounded-sm">
             Continue Shopping
           </Link>
