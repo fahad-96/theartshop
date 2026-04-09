@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import MainHeader from "../components/MainHeader";
@@ -7,6 +7,7 @@ import { supabase, isSupabaseConfigured } from "../lib/supabaseClient";
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
 const PAYMENT_API_TIMEOUT_MS = 20000;
+const FINALIZE_API_TIMEOUT_MS = 15000;
 const notifyApiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
 const PENDING_PAYMENT_KEY = "tas-pending-payment";
 
@@ -221,6 +222,41 @@ export default function PaymentPage() {
     } catch {}
   };
 
+  // ── Finalize order on server (primary path; resilient on mobile) ──
+  const finalizeOrderOnServer = async ({ ref, snap, paymentPayload, userId, userEmail }) => {
+    try {
+      const res = await withTimeout(
+        fetch(`${apiBaseUrl}/api/payment/finalize`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            orderRef: ref,
+            amount: Number(snap.subtotal),
+            currency: "INR",
+            items: snap.items,
+            shipping: snap.shipping,
+            userId,
+            userEmail,
+            razorpayOrderId: paymentPayload.razorpayOrderId,
+            razorpayPaymentId: paymentPayload.razorpayPaymentId,
+            payment: paymentPayload,
+          }),
+        }),
+        FINALIZE_API_TIMEOUT_MS,
+        "Order finalization server timed out."
+      );
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        return { ok: false, message: data?.message || "Server could not finalize the order." };
+      }
+
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: error?.message || "Server finalization failed." };
+    }
+  };
+
   // ── Recovery: verify pending payment via server and save ──
   const recoverPendingPayment = async (pending) => {
     setPhase("recovering");
@@ -260,10 +296,21 @@ export default function PaymentPage() {
         razorpayPaymentId: result.paymentId || "",
       };
 
-      // Refresh session before saving (recovery flow — session may be stale)
-      await tryRefreshSession();
+      // Primary: server-side finalize (independent of fragile mobile client auth)
+      const serverFinalize = await finalizeOrderOnServer({
+        ref: pending.orderRef,
+        snap: pending.snapshot,
+        paymentPayload,
+        userId: pending.userId,
+        userEmail: pending.email,
+      });
 
-      const saved = await saveOrderToDb(pending.orderRef, pending.snapshot, paymentPayload, pending.userId);
+      // Fallback: direct client insert if server finalize is unavailable
+      let saved = serverFinalize.ok;
+      if (!saved) {
+        await tryRefreshSession();
+        saved = await saveOrderToDb(pending.orderRef, pending.snapshot, paymentPayload, pending.userId);
+      }
 
       if (saved) {
         clearPendingPayment();
@@ -274,7 +321,8 @@ export default function PaymentPage() {
         setPhase("save-failed");
         setErrorMsg(
           "Your payment of ₹" + pending.snapshot.subtotal + " was successful, but the order couldn't be saved. " +
-          "Your money is safe. Please tap 'Retry Saving Order' or contact us."
+          "Your money is safe. Please tap 'Retry Saving Order' or contact us." +
+          (serverFinalize?.message ? " (Reason: " + serverFinalize.message + ")" : "")
         );
       }
     } catch (e) {
@@ -318,7 +366,7 @@ export default function PaymentPage() {
             amount: snap.subtotal,
             currency: "INR",
             receipt: ref,
-            notes: { userEmail: authUser.email || "", orderRef: ref },
+            notes: { userEmail: authUser.email || "", userId: authUser.id || "", orderRef: ref },
           }),
         }),
         PAYMENT_API_TIMEOUT_MS,
@@ -372,10 +420,21 @@ export default function PaymentPage() {
 
           // Run save in a non-async wrapper so Razorpay doesn't interfere
           (async () => {
-            // Best-effort session refresh (with timeout — won't hang)
-            await tryRefreshSession();
+            // Primary: server-side finalize (independent of fragile mobile client auth)
+            const serverFinalize = await finalizeOrderOnServer({
+              ref,
+              snap,
+              paymentPayload,
+              userId: currentUserId,
+              userEmail: authUser?.email || "",
+            });
 
-            const saved = await saveOrderToDb(ref, snap, paymentPayload, currentUserId);
+            // Fallback: direct client insert if server finalize is unavailable
+            let saved = serverFinalize.ok;
+            if (!saved) {
+              await tryRefreshSession();
+              saved = await saveOrderToDb(ref, snap, paymentPayload, currentUserId);
+            }
 
             if (saved) {
               clearPendingPayment();
@@ -386,7 +445,8 @@ export default function PaymentPage() {
               setPhase("save-failed");
               setErrorMsg(
                 "Payment was successful (₹" + snap.subtotal + "), but the order couldn't be saved. " +
-                "Your money is safe. Please tap 'Retry Saving Order'."
+                "Your money is safe. Please tap 'Retry Saving Order'." +
+                (serverFinalize?.message ? " (Reason: " + serverFinalize.message + ")" : "")
               );
             }
           })();
