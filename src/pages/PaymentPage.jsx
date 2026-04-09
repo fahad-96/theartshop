@@ -131,36 +131,32 @@ export default function PaymentPage() {
     try { localStorage.removeItem(PENDING_PAYMENT_KEY); } catch {}
   };
 
-  // ── Get a valid user ID from Supabase (fresh token) ──
-  const getFreshUserId = async () => {
-    if (!isSupabaseConfigured || !supabase) return null;
+  // ── Timeout wrapper for any promise ──
+  const withSaveTimeout = (promise, ms = 8000) =>
+    Promise.race([
+      promise,
+      new Promise((_, rej) => setTimeout(() => rej(new Error("Request timed out")), ms)),
+    ]);
 
-    // Try refreshing the session first — this gets a fresh JWT
+  // ── Try to refresh the Supabase session (with timeout, best-effort) ──
+  const tryRefreshSession = async () => {
+    if (!isSupabaseConfigured || !supabase) return;
     try {
-      const { data } = await supabase.auth.refreshSession();
-      if (data?.session?.user?.id) return data.session.user.id;
-    } catch {}
-
-    // Fallback: getUser makes a network call to verify the token
-    try {
-      const { data } = await supabase.auth.getUser();
-      if (data?.user?.id) return data.user.id;
-    } catch {}
-
-    // Last resort: use the cached authUser
-    return authUser?.id || null;
+      await withSaveTimeout(supabase.auth.refreshSession(), 5000);
+    } catch (e) {
+      console.warn("Session refresh skipped:", e.message);
+    }
   };
 
   // ── Save order to Supabase ──
-  const saveOrderToDb = async (ref, snap, paymentPayload) => {
+  const saveOrderToDb = async (ref, snap, paymentPayload, userId) => {
     if (!isSupabaseConfigured || !supabase) {
       console.error("Order save: Supabase not configured");
       return false;
     }
 
-    const userId = await getFreshUserId();
     if (!userId) {
-      console.error("Order save: no authenticated user after session refresh");
+      console.error("Order save: no user ID provided");
       return false;
     }
 
@@ -175,26 +171,33 @@ export default function PaymentPage() {
       payment: paymentPayload,
     };
 
-    // Try up to 3 times with increasing delays
+    // Try up to 3 times with timeout on each attempt
     for (let attempt = 1; attempt <= 3; attempt++) {
-      const { error: insertErr } = await supabase.from("orders").insert(orderData);
+      try {
+        const { error: insertErr } = await withSaveTimeout(
+          supabase.from("orders").insert(orderData),
+          10000
+        );
 
-      if (!insertErr) {
-        console.log("Order saved successfully:", ref);
-        return true;
+        if (!insertErr) {
+          console.log("Order saved successfully:", ref);
+          return true;
+        }
+
+        if (insertErr.message?.toLowerCase().includes("duplicate")) {
+          console.log("Order already exists (duplicate):", ref);
+          return true;
+        }
+
+        console.error(`Order save attempt ${attempt}/3 failed:`, insertErr.message, insertErr.code);
+      } catch (e) {
+        console.error(`Order save attempt ${attempt}/3 error:`, e.message);
       }
-
-      if (insertErr.message?.toLowerCase().includes("duplicate")) {
-        console.log("Order already exists (duplicate):", ref);
-        return true;
-      }
-
-      console.error(`Order save attempt ${attempt}/3 failed:`, insertErr.message, insertErr.code, insertErr.details, insertErr.hint);
 
       if (attempt < 3) {
-        // Refresh session before retrying
-        try { await supabase.auth.refreshSession(); } catch {}
-        await new Promise((r) => setTimeout(r, 1000 * attempt));
+        // Best-effort session refresh before retrying (with timeout so it can't hang)
+        await tryRefreshSession();
+        await new Promise((r) => setTimeout(r, 800));
       }
     }
 
@@ -257,7 +260,10 @@ export default function PaymentPage() {
         razorpayPaymentId: result.paymentId || "",
       };
 
-      const saved = await saveOrderToDb(pending.orderRef, pending.snapshot, paymentPayload);
+      // Refresh session before saving (recovery flow — session may be stale)
+      await tryRefreshSession();
+
+      const saved = await saveOrderToDb(pending.orderRef, pending.snapshot, paymentPayload, pending.userId);
 
       if (saved) {
         clearPendingPayment();
@@ -361,15 +367,21 @@ export default function PaymentPage() {
             razorpayPaymentId: result.razorpay_payment_id,
           };
 
+          // Capture userId now (before any async work) — session is fresh here
+          const currentUserId = authUser?.id;
+
           // Run save in a non-async wrapper so Razorpay doesn't interfere
           (async () => {
-            const saved = await saveOrderToDb(ref, snap, paymentPayload);
+            // Best-effort session refresh (with timeout — won't hang)
+            await tryRefreshSession();
+
+            const saved = await saveOrderToDb(ref, snap, paymentPayload, currentUserId);
 
             if (saved) {
               clearPendingPayment();
               clearCart();
               navigate("/order-success", { replace: true });
-              sendEmailNotification(ref, snap, paymentPayload, authUser.email);
+              sendEmailNotification(ref, snap, paymentPayload, authUser?.email);
             } else {
               setPhase("save-failed");
               setErrorMsg(
