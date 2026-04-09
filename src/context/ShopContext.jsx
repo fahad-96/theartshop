@@ -385,7 +385,10 @@ export function ShopProvider({ children }) {
   };
 
   const updateCartQty = (productId, size, nextQty) => {
-    if (nextQty < 1) return;
+    if (nextQty < 1) {
+      removeCartItem(productId, size);
+      return;
+    }
 
     const existingOtherQty = cartItems
       .filter((item) => item.productId === productId && item.size !== size)
