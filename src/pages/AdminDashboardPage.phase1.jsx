@@ -81,6 +81,7 @@ export default function AdminDashboardPage() {
   const [orderDateFrom, setOrderDateFrom] = useState("");
   const [orderDateTo, setOrderDateTo] = useState("");
   const [orderDrafts, setOrderDrafts] = useState({});
+  const [updatingOrderId, setUpdatingOrderId] = useState(null);
   const [activeOrder, setActiveOrder] = useState(null);
 
   const [reviewStatusFilter, setReviewStatusFilter] = useState("all");
@@ -361,11 +362,10 @@ export default function AdminDashboardPage() {
   const onUpdateOrderStatus = async (orderId) => {
     const status = orderDrafts[orderId];
     if (!status) return;
-    setSaving(true);
+    setUpdatingOrderId(orderId);
     try {
       await updateAdminOrderStatus(supabase, orderId, status);
       await refreshOrders();
-      setFlash("Order status updated.", "success");
 
       // Send email notification to customer
       const order = orders.find((o) => o.dbId === orderId);
@@ -386,10 +386,11 @@ export default function AdminDashboardPage() {
           });
         } catch { /* email is best-effort */ }
       }
+      setFlash("Order status updated & customer notified.", "success");
     } catch (error) {
       setFlash(error.message || "Could not update order status.", "error");
     } finally {
-      setSaving(false);
+      setUpdatingOrderId(null);
     }
   };
 
@@ -971,10 +972,19 @@ export default function AdminDashboardPage() {
                           <td className="p-3"><StatusBadge status={o.status} /></td>
                           <td className="p-3" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-1.5">
-                              <select value={orderDrafts[o.dbId] || o.status} onChange={(e) => setOrderDrafts((prev) => ({ ...prev, [o.dbId]: e.target.value }))} className="bg-[#1a1a1c] border border-white/[0.08] rounded-md px-2 py-1 text-xs text-white outline-none" style={{ colorScheme: 'dark' }}>
+                              <select value={orderDrafts[o.dbId] || o.status} onChange={(e) => setOrderDrafts((prev) => ({ ...prev, [o.dbId]: e.target.value }))} disabled={updatingOrderId === o.dbId} className="bg-[#1a1a1c] border border-white/[0.08] rounded-md px-2 py-1 text-xs text-white outline-none disabled:opacity-40" style={{ colorScheme: 'dark' }}>
                                 {["Placed","Processing","Shipped","Delivered","Cancelled"].map((s) => <option key={s} style={{ backgroundColor: '#1a1a1c', color: '#fff' }}>{s}</option>)}
                               </select>
-                              <SmallBtn onClick={() => onUpdateOrderStatus(o.dbId)}>Save</SmallBtn>
+                              <button
+                                type="button"
+                                onClick={() => onUpdateOrderStatus(o.dbId)}
+                                disabled={updatingOrderId === o.dbId}
+                                className="border border-white/10 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors text-white/60 hover:bg-white/[0.04] disabled:opacity-60 disabled:cursor-wait flex items-center gap-1.5 min-w-[60px] justify-center"
+                              >
+                                {updatingOrderId === o.dbId ? (
+                                  <><svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> Updating…</>
+                                ) : "Save"}
+                              </button>
                             </div>
                           </td>
                         </tr>
