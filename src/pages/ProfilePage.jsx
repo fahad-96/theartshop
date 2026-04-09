@@ -42,6 +42,7 @@ export default function ProfilePage() {
     fullName: "",
     phone: "",
     landmark: "",
+    pincode: "",
     address: "",
   });
 
@@ -89,7 +90,7 @@ export default function ProfilePage() {
 
     setAddressBook([]);
     setDefaultAddressIndex(0);
-    setAddressForm({ fullName: authUser.name || "", phone: "", landmark: "", address: "" });
+    setAddressForm({ fullName: authUser.name || "", phone: "", landmark: "", pincode: "", address: "" });
     setEditingAddressIndex(-1);
     setIsEditingAddress(true);
     setActiveSection("addresses");
@@ -146,6 +147,7 @@ export default function ProfilePage() {
       fullName: addressForm.fullName.trim(),
       phone: addressForm.phone.trim(),
       landmark: addressForm.landmark.trim(),
+      pincode: addressForm.pincode?.trim() || "",
       address: addressForm.address.trim(),
     };
 
@@ -186,6 +188,7 @@ export default function ProfilePage() {
       fullName: authUser.name || "",
       phone: "",
       landmark: "",
+      pincode: "",
       address: "",
     });
     setMessage("");
@@ -241,9 +244,10 @@ export default function ProfilePage() {
         fullName: authUser.name || "",
         phone: "",
         landmark: "",
+        pincode: "",
         address: "",
       });
-      setAddressForm({ fullName: authUser.name || "", phone: "", landmark: "", address: "" });
+      setAddressForm({ fullName: authUser.name || "", phone: "", landmark: "", pincode: "", address: "" });
       setIsEditingAddress(true);
       setEditingAddressIndex(-1);
       setMessage("Address removed. Please add a new address.");
@@ -327,7 +331,6 @@ export default function ProfilePage() {
             <p className="text-xs uppercase tracking-[0.24em] text-white/55">
               {editingAddressIndex >= 0 ? "Edit Address" : "Add New Address"}
             </p>
-            <label className="text-xs uppercase tracking-[0.24em] text-white/55">Full Name</label>
             <input
               value={addressForm.fullName}
               onChange={(e) => {
@@ -335,10 +338,9 @@ export default function ProfilePage() {
                 setMessage("");
               }}
               className="w-full bg-black/40 border border-white/20 rounded-sm px-4 py-3.5 outline-none focus:border-white transition-colors"
-              placeholder="Recipient full name"
+              placeholder="Full name"
             />
 
-            <label className="text-xs uppercase tracking-[0.24em] text-white/55">Phone Number</label>
             <input
               value={addressForm.phone}
               onChange={(e) => {
@@ -350,7 +352,6 @@ export default function ProfilePage() {
               placeholder="Phone number"
             />
 
-            <label className="text-xs uppercase tracking-[0.24em] text-white/55">Landmark (Optional)</label>
             <input
               value={addressForm.landmark}
               onChange={(e) => {
@@ -358,10 +359,22 @@ export default function ProfilePage() {
                 setMessage("");
               }}
               className="w-full bg-black/40 border border-white/20 rounded-sm px-4 py-3.5 outline-none focus:border-white transition-colors"
-              placeholder="Near mosque, school, mall, etc."
+              placeholder="Landmark (optional)"
             />
 
-            <label className="text-xs uppercase tracking-[0.24em] text-white/55">Address From Mapbox</label>
+            <input
+              value={addressForm.pincode || ""}
+              onChange={(e) => {
+                const val = e.target.value.replace(/[^0-9]/g, "").slice(0, 6);
+                setAddressForm((prev) => ({ ...prev, pincode: val }));
+                setMessage("");
+              }}
+              className="w-full bg-black/40 border border-white/20 rounded-sm px-4 py-3.5 outline-none focus:border-white transition-colors"
+              placeholder="Pincode"
+              maxLength={6}
+              inputMode="numeric"
+            />
+
             <MapboxAddressInput
               value={addressForm.address}
               onChange={(address) => {
@@ -407,6 +420,7 @@ export default function ProfilePage() {
                   </p>
                   <p className="mt-2 text-lg font-semibold text-white">{entry.fullName}</p>
                   {entry.landmark && <p className="text-white/70 mt-1">{entry.landmark}</p>}
+                  {entry.pincode && <p className="text-white/70 mt-1">PIN: {entry.pincode}</p>}
                   <p className="text-white/80 mt-1 whitespace-pre-line">{entry.address}</p>
                   <p className="text-white/75 mt-1">Phone number: {entry.phone}</p>
                   <button type="button" className="mt-1 text-sm text-white/65 underline underline-offset-2">

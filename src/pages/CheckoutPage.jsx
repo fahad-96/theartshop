@@ -30,7 +30,7 @@ export default function CheckoutPage() {
   const [selectedAddressIndex, setSelectedAddressIndex] = useState(0);
   const [showAddForm, setShowAddForm] = useState(false);
   const [savingAddress, setSavingAddress] = useState(false);
-  const [addressForm, setAddressForm] = useState({ fullName: "", phone: "", landmark: "", address: "" });
+  const [addressForm, setAddressForm] = useState({ fullName: "", phone: "", landmark: "", pincode: "", address: "" });
   const [continuing, setContinuing] = useState(false);
 
   const {
@@ -94,7 +94,7 @@ export default function CheckoutPage() {
       setMessage("Name, phone, and address are required.");
       return;
     }
-    const normalized = { fullName: addressForm.fullName.trim(), phone: addressForm.phone.trim(), landmark: addressForm.landmark.trim(), address: addressForm.address.trim() };
+    const normalized = { fullName: addressForm.fullName.trim(), phone: addressForm.phone.trim(), landmark: addressForm.landmark.trim(), pincode: addressForm.pincode.trim(), address: addressForm.address.trim() };
     const next = [...addressBook, normalized];
     const idx = next.length - 1;
     setAddressBook(next);
@@ -186,6 +186,7 @@ export default function CheckoutPage() {
                           <p className="font-semibold text-sm">{addr.fullName}</p>
                           <p className="text-xs text-white/60 mt-0.5">{addr.phone}</p>
                           <p className="text-xs text-white/50 mt-1">{addr.address}</p>
+                          {addr.pincode && <p className="text-xs text-white/40 mt-0.5">PIN: {addr.pincode}</p>}
                           {addr.landmark && <p className="text-xs text-white/40 mt-0.5">{addr.landmark}</p>}
                         </div>
                         <span className={`w-4 h-4 rounded-full border-2 mt-1 shrink-0 ${selectedAddressIndex === i ? "border-white bg-white" : "border-white/30"}`} />
@@ -201,6 +202,7 @@ export default function CheckoutPage() {
                   <input value={addressForm.fullName} onChange={(e) => setAddressForm((p) => ({ ...p, fullName: e.target.value }))} className="w-full bg-transparent border border-white/15 rounded-sm px-4 py-3.5 text-sm outline-none focus:border-white/50 transition-colors" placeholder="Full name" />
                   <input value={addressForm.phone} onChange={(e) => setAddressForm((p) => ({ ...p, phone: e.target.value.replace(/[^0-9+\s-]/g, "") }))} className="w-full bg-transparent border border-white/15 rounded-sm px-4 py-3.5 text-sm outline-none focus:border-white/50 transition-colors" placeholder="Phone number" />
                   <input value={addressForm.landmark} onChange={(e) => setAddressForm((p) => ({ ...p, landmark: e.target.value }))} className="w-full bg-transparent border border-white/15 rounded-sm px-4 py-3.5 text-sm outline-none focus:border-white/50 transition-colors" placeholder="Landmark (optional)" />
+                  <input value={addressForm.pincode} onChange={(e) => setAddressForm((p) => ({ ...p, pincode: e.target.value.replace(/[^0-9]/g, "").slice(0, 6) }))} className="w-full bg-transparent border border-white/15 rounded-sm px-4 py-3.5 text-sm outline-none focus:border-white/50 transition-colors" placeholder="Pincode" maxLength={6} inputMode="numeric" />
                   <MapboxAddressInput value={addressForm.address} onChange={(a) => setAddressForm((p) => ({ ...p, address: a }))} onEdit={() => setMessage("")} />
                   <div className="flex gap-3 pt-2">
                     <button type="submit" disabled={savingAddress} className="bg-white text-black rounded-sm px-6 py-3 text-xs uppercase tracking-[0.18em] font-bold active:scale-[0.98] transition-transform disabled:opacity-50 flex items-center gap-2">{savingAddress && <span className="w-3.5 h-3.5 border-2 border-black/20 border-t-black rounded-full animate-spin" />}{savingAddress ? "Saving..." : "Save"}</button>
@@ -213,7 +215,7 @@ export default function CheckoutPage() {
 
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 pt-2">
                 {!showAddForm && (
-                  <button type="button" onClick={() => { setShowAddForm(true); setAddressForm({ fullName: authUser?.name || "", phone: "", landmark: "", address: "" }); }} className="text-xs uppercase tracking-[0.18em] text-white/50 hover:text-white/80 transition-colors">
+                  <button type="button" onClick={() => { setShowAddForm(true); setAddressForm({ fullName: authUser?.name || "", phone: "", landmark: "", pincode: "", address: "" }); }} className="text-xs uppercase tracking-[0.18em] text-white/50 hover:text-white/80 transition-colors">
                     + Add new address
                   </button>
                 )}

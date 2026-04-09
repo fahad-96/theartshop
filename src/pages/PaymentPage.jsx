@@ -7,7 +7,6 @@ import { supabase, isSupabaseConfigured } from "../lib/supabaseClient";
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
 const PAYMENT_API_TIMEOUT_MS = 20000;
-const PENDING_KEY = "tas-pending-order";
 const notifyApiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
 
 // ── Helpers ──
@@ -46,26 +45,20 @@ export default function PaymentPage() {
     getProductById, shippingDetails, clearCart,
   } = useShop();
 
-  // Phase: ready → saving → connecting → awaiting → confirming → done | error
+  // Phase: ready → connecting → awaiting → done | error
   const [phase, setPhase] = useState("ready");
   const [errorMsg, setErrorMsg] = useState("");
-  const [orderRef, setOrderRef] = useState("");
-  const [paymentIdStr, setPaymentIdStr] = useState("");
+  const [snapshot, setSnapshot] = useState(null);
 
   const paymentDoneRef = useRef(false);
-  const orderSavedRef = useRef(false);
-  const snapshotRef = useRef(null);
-  const attemptedRecoveryRef = useRef(false);
 
-  // ── Build order snapshot ──
-  // Capture everything we need on mount so it's immune to state changes
+  // ── Build order snapshot on mount ──
   useEffect(() => {
     const routeState = location.state;
     if (routeState?.items?.length && routeState?.subtotal && routeState?.shipping) {
-      snapshotRef.current = routeState;
-      try { sessionStorage.setItem(PENDING_KEY + "-snapshot", JSON.stringify(routeState)); } catch {}
+      setSnapshot(routeState);
     } else if (cartItems.length && cartSubtotal > 0) {
-      const snap = {
+      setSnapshot({
         items: cartItems.map((ci) => {
           const p = getProductById(ci.productId);
           return {
@@ -77,69 +70,46 @@ export default function PaymentPage() {
         }),
         subtotal: cartSubtotal,
         shipping: { ...shippingDetails },
-      };
-      snapshotRef.current = snap;
-      try { sessionStorage.setItem(PENDING_KEY + "-snapshot", JSON.stringify(snap)); } catch {}
-    } else {
-      // Try sessionStorage fallback
-      try {
-        const saved = sessionStorage.getItem(PENDING_KEY + "-snapshot");
-        if (saved) snapshotRef.current = JSON.parse(saved);
-      } catch {}
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Recovery: if we saved an order but page died before confirming ──
-  useEffect(() => {
-    if (!authReady || attemptedRecoveryRef.current) return;
-    attemptedRecoveryRef.current = true;
-
-    try {
-      const raw = sessionStorage.getItem(PENDING_KEY);
-      if (!raw) return;
-      const { orderRef: savedRef, razorpayOrderId, timestamp } = JSON.parse(raw);
-      const age = Date.now() - timestamp;
-      if (!savedRef || age > 600_000) {
-        sessionStorage.removeItem(PENDING_KEY);
-        return;
-      }
-
-      // Check if this order already got confirmed in Supabase
-      if (isSupabaseConfigured && supabase && authUser?.id) {
-        supabase
-          .from("orders")
-          .select("status")
-          .eq("order_ref", savedRef)
-          .eq("user_id", authUser.id)
-          .maybeSingle()
-          .then(({ data }) => {
-            if (data && data.status?.toLowerCase() === "paid") {
-              // Already confirmed — go to success
-              sessionStorage.removeItem(PENDING_KEY);
-              sessionStorage.removeItem(PENDING_KEY + "-snapshot");
-              clearCart();
-              navigate("/order-success", { replace: true });
-            }
-            // If still pending, the user can retry payment on this page
-          });
-      }
-    } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authReady]);
-
   // ── Guard: redirect if no data ──
   useEffect(() => {
     if (authReady && !authUser) { navigate("/login", { replace: true }); return; }
-    // Give a tick for snapshot to populate
     const timer = setTimeout(() => {
-      if (!snapshotRef.current && !cartItems.length && phase === "ready") {
+      if (!snapshot && !cartItems.length && phase === "ready") {
         navigate("/checkout", { replace: true });
       }
-    }, 200);
+    }, 300);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authReady, authUser]);
+  }, [authReady, authUser, snapshot]);
+
+  // ── Save order to DB (fire-and-forget after payment) ──
+  const saveOrderToDb = async (ref, snap, paymentPayload) => {
+    if (!isSupabaseConfigured || !supabase || !authUser?.id) return;
+    try {
+      await supabase.auth.getSession();
+    } catch {}
+
+    // Insert order with status "Paid"
+    const { error: insertErr } = await supabase.from("orders").insert({
+      user_id: authUser.id,
+      order_ref: ref,
+      amount: snap.subtotal,
+      currency: "INR",
+      status: "Paid",
+      items: snap.items,
+      shipping: snap.shipping,
+      payment: paymentPayload,
+    });
+
+    if (insertErr && !insertErr.message?.toLowerCase().includes("duplicate")) {
+      console.warn("Order save failed:", insertErr.message);
+    }
+  };
 
   // ── Send email notification (fire-and-forget) ──
   const sendEmailNotification = (ref, snap, payment) => {
@@ -160,49 +130,16 @@ export default function PaymentPage() {
 
   // ── MAIN PAYMENT FLOW ──
   const handlePay = async () => {
-    const snap = snapshotRef.current;
+    const snap = snapshot;
     if (!snap || !authUser?.id || paymentDoneRef.current) return;
 
     setErrorMsg("");
-    setPhase("saving");
+    setPhase("connecting");
 
     const ref = generateOrderRef();
-    setOrderRef(ref);
 
     try {
-      // ─── STEP 1: Save order to Supabase with status "pending" ───
-      // This ensures the order exists BEFORE any money moves.
-      if (!isSupabaseConfigured || !supabase) throw new Error("Order service is not available.");
-
-      // Refresh auth token (critical after mobile tab suspension)
-      try { await supabase.auth.getSession(); } catch {}
-
-      const { error: insertErr } = await supabase.from("orders").insert({
-        user_id: authUser.id,
-        order_ref: ref,
-        amount: snap.subtotal,
-        currency: "INR",
-        status: "pending",
-        items: snap.items,
-        shipping: snap.shipping,
-        payment: {},
-      });
-
-      if (insertErr) {
-        // If it's a duplicate key, order already exists — that's fine
-        if (!insertErr.message?.toLowerCase().includes("duplicate")) {
-          throw new Error(`Could not create order: ${insertErr.message}`);
-        }
-      }
-
-      orderSavedRef.current = true;
-
-      // Persist recovery info
-      try { sessionStorage.setItem(PENDING_KEY, JSON.stringify({ orderRef: ref, timestamp: Date.now() })); } catch {}
-
-      // ─── STEP 2: Create Razorpay order ───
-      setPhase("connecting");
-
+      // ─── STEP 1: Load Razorpay SDK & create payment order ───
       const sdkLoaded = await loadRazorpaySdk();
       if (!sdkLoaded) throw new Error("Could not load payment gateway. Check your network or disable ad-blockers.");
 
@@ -224,10 +161,7 @@ export default function PaymentPage() {
       const rpData = await res.json().catch(() => null);
       if (!res.ok || !rpData?.ok) throw new Error(rpData?.message || "Payment gateway returned an error.");
 
-      // Update recovery info with razorpay order id
-      try { sessionStorage.setItem(PENDING_KEY, JSON.stringify({ orderRef: ref, razorpayOrderId: rpData.order.id, timestamp: Date.now() })); } catch {}
-
-      // ─── STEP 3: Open Razorpay checkout ───
+      // ─── STEP 2: Open Razorpay checkout ───
       setPhase("awaiting");
 
       const razorpay = new window.Razorpay({
@@ -244,12 +178,9 @@ export default function PaymentPage() {
         },
         theme: { color: "#0f0f0f" },
 
-        // ─── STEP 4: Payment success handler ───
+        // ─── STEP 3: Payment success → save order → send email → navigate ───
         handler: async (result) => {
-          // Payment is DONE — user has been charged.
           paymentDoneRef.current = true;
-          setPhase("confirming");
-          setPaymentIdStr(result.razorpay_payment_id || "");
 
           const paymentPayload = {
             provider: "razorpay",
@@ -258,55 +189,15 @@ export default function PaymentPage() {
             razorpayPaymentId: result.razorpay_payment_id,
           };
 
-          // Try to update order status via RPC (up to 3 attempts)
-          let confirmed = false;
-          for (let attempt = 0; attempt < 3; attempt++) {
-            try {
-              // Refresh auth token before each attempt
-              try { await supabase.auth.getSession(); } catch {}
-
-              const { data: rpcResult, error: rpcErr } = await supabase.rpc(
-                "confirm_order_payment",
-                { p_order_ref: ref, p_payment: paymentPayload }
-              );
-
-              if (rpcErr) {
-                // RPC function might not exist yet — fallback to direct update
-                console.warn("RPC error, trying direct update:", rpcErr.message);
-                const { error: updateErr } = await supabase
-                  .from("orders")
-                  .update({ status: "Paid", payment: paymentPayload, updated_at: new Date().toISOString() })
-                  .eq("order_ref", ref)
-                  .eq("user_id", authUser.id);
-                if (!updateErr) { confirmed = true; break; }
-                console.warn("Direct update also failed:", updateErr.message);
-              } else {
-                const parsed = typeof rpcResult === "string" ? JSON.parse(rpcResult) : rpcResult;
-                if (parsed?.ok) { confirmed = true; break; }
-              }
-            } catch (e) {
-              console.warn(`Confirm attempt ${attempt + 1} failed:`, e.message);
-            }
-            if (attempt < 2) await new Promise((r) => setTimeout(r, 2000));
-          }
-
-          // Clear cart and pending state regardless
+          // Clear cart immediately
           clearCart();
-          try { sessionStorage.removeItem(PENDING_KEY); } catch {}
-          try { sessionStorage.removeItem(PENDING_KEY + "-snapshot"); } catch {}
 
-          // Send email notification
+          // Navigate to success page right away
+          navigate("/order-success", { replace: true });
+
+          // Save order to DB and send email in background
+          saveOrderToDb(ref, snap, paymentPayload);
           sendEmailNotification(ref, snap, paymentPayload);
-
-          if (confirmed) {
-            setPhase("done");
-            navigate("/order-success", { replace: true });
-          } else {
-            // Order exists as "pending" in DB — admin can see it.
-            // Still navigate to success since order IS saved and payment IS done.
-            setPhase("done");
-            navigate("/order-success", { replace: true });
-          }
         },
 
         // ─── Payment modal dismissed ───
@@ -314,23 +205,22 @@ export default function PaymentPage() {
           ondismiss: () => {
             if (paymentDoneRef.current) return;
             setPhase("ready");
-            setErrorMsg("Payment was cancelled. Your order is saved — you can retry.");
+            setErrorMsg("Payment was cancelled. You can retry anytime.");
           },
         },
       });
 
       razorpay.open();
     } catch (err) {
-      if (paymentDoneRef.current) return; // Never block after payment
-      setPhase("error");
+      if (paymentDoneRef.current) return;
+      setPhase("ready");
       setErrorMsg(err.message || "Something went wrong.");
     }
   };
 
   // ── Render ──
 
-  const snap = snapshotRef.current;
-  const showLoading = !authReady || (!snap && !cartItems.length);
+  const showLoading = !authReady || (!snapshot && !cartItems.length);
 
   if (showLoading) {
     return (
@@ -340,17 +230,15 @@ export default function PaymentPage() {
     );
   }
 
-  const displayItems = snap?.items || [];
-  const displayTotal = snap?.subtotal || 0;
-  const displayShipping = snap?.shipping || {};
+  const displayItems = snapshot?.items || [];
+  const displayTotal = snapshot?.subtotal || 0;
+  const displayShipping = snapshot?.shipping || {};
 
-  const isProcessing = ["saving", "connecting", "awaiting", "confirming"].includes(phase);
+  const isProcessing = ["connecting", "awaiting"].includes(phase);
 
   const phaseLabels = {
-    saving: { title: "Saving Order...", sub: "Creating your order before payment" },
     connecting: { title: "Connecting...", sub: "Setting up secure payment gateway" },
     awaiting: { title: "Awaiting Payment...", sub: "Complete payment in the popup window" },
-    confirming: { title: "Confirming...", sub: "Updating your order — almost done" },
   };
 
   return (
@@ -385,11 +273,7 @@ export default function PaymentPage() {
                     animate={{ opacity: [0.5, 1, 0.5] }}
                     transition={{ duration: 1.5, repeat: Infinity }}
                   >
-                    {phase === "confirming" ? (
-                      <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" />
-                    ) : (
-                      <path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" strokeLinecap="round" strokeLinejoin="round" />
-                    )}
+                    <path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" strokeLinecap="round" strokeLinejoin="round" />
                   </motion.svg>
                 </div>
               </div>
@@ -411,8 +295,8 @@ export default function PaymentPage() {
               </AnimatePresence>
 
               <div className="flex items-center justify-center gap-2 mt-8">
-                {["saving", "connecting", "awaiting", "confirming"].map((p, i) => {
-                  const currentIdx = ["saving", "connecting", "awaiting", "confirming"].indexOf(phase);
+                {["connecting", "awaiting"].map((p, i) => {
+                  const currentIdx = ["connecting", "awaiting"].indexOf(phase);
                   return (
                     <motion.div
                       key={p}

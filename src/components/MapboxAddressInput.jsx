@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { LocateFixed, MapPin } from "lucide-react";
 import "mapbox-gl/dist/mapbox-gl.css";
 
-const INDIA_BBOX = [68.1113787, 6.5546079, 97.395561, 35.6745457];
+const INDIA_BBOX_FLAT = [68.1113787, 6.5546079, 97.395561, 35.6745457];
+const INDIA_BBOX = [[68.1113787, 6.5546079], [97.395561, 35.6745457]];
 const JK_PROXIMITY = [74.7973, 34.0837];
 
 export default function MapboxAddressInput({ value, onChange, onEdit }) {
@@ -25,26 +26,15 @@ export default function MapboxAddressInput({ value, onChange, onEdit }) {
   useEffect(() => {
     if (!isMapOpen) return undefined;
 
-    const scrollY = window.scrollY;
-    const originalBodyPosition = document.body.style.position;
-    const originalBodyTop = document.body.style.top;
-    const originalBodyWidth = document.body.style.width;
-    const originalBodyOverflow = document.body.style.overflow;
+    // Prevent background scroll without position:fixed (which breaks mapbox-gl clicks)
+    const originalOverflow = document.body.style.overflow;
     const originalHtmlOverflow = document.documentElement.style.overflow;
-
-    document.body.style.position = "fixed";
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.width = "100%";
     document.body.style.overflow = "hidden";
     document.documentElement.style.overflow = "hidden";
 
     return () => {
-      document.body.style.position = originalBodyPosition;
-      document.body.style.top = originalBodyTop;
-      document.body.style.width = originalBodyWidth;
-      document.body.style.overflow = originalBodyOverflow;
+      document.body.style.overflow = originalOverflow;
       document.documentElement.style.overflow = originalHtmlOverflow;
-      window.scrollTo(0, scrollY);
     };
   }, [isMapOpen]);
 
@@ -108,7 +98,7 @@ export default function MapboxAddressInput({ value, onChange, onEdit }) {
           language: "en",
           types: "address,place,postcode,locality,neighborhood",
           country: "IN",
-          bbox: INDIA_BBOX.join(","),
+          bbox: INDIA_BBOX_FLAT.join(","),
           proximity: JK_PROXIMITY.join(","),
         });
 
@@ -139,9 +129,14 @@ export default function MapboxAddressInput({ value, onChange, onEdit }) {
   }, [token, value, allowSuggestions, isFocused]);
 
   useEffect(() => {
-    if (!isMapOpen || !token || !mapContainerRef.current || mapRef.current) {
+    if (!isMapOpen || !token || !mapContainerRef.current) {
       return;
     }
+
+    // Clean up previous map instance if it exists
+    if (markerRef.current) { markerRef.current.remove(); markerRef.current = null; }
+    if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+
     let isDisposed = false;
 
     const initMap = async () => {
@@ -159,7 +154,7 @@ export default function MapboxAddressInput({ value, onChange, onEdit }) {
         container: mapContainerRef.current,
         style: "mapbox://styles/mapbox/streets-v12",
         center: fallbackCenter,
-        zoom: 12,
+        zoom: 5,
         maxBounds: INDIA_BBOX,
         dragPan: true,
         scrollZoom: true,
@@ -167,31 +162,48 @@ export default function MapboxAddressInput({ value, onChange, onEdit }) {
         interactive: true,
       });
 
+      map.addControl(new mapboxgl.NavigationControl(), "top-right");
+
       mapRef.current = map;
 
       map.on("load", () => {
         map.resize();
+        // Try to get user's location and fly there on load
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              if (!isDisposed && mapRef.current) {
+                mapRef.current.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 13, duration: 1500 });
+              }
+            },
+            () => {},
+            { enableHighAccuracy: false, timeout: 5000 }
+          );
+        }
       });
 
       setTimeout(() => {
         if (mapRef.current) mapRef.current.resize();
-      }, 100);
+      }, 200);
 
       map.on("click", async (event) => {
         const { lng, lat } = event.lngLat;
 
         if (!markerRef.current) {
-          markerRef.current = new mapboxgl.Marker({ draggable: true })
+          markerRef.current = new mapboxgl.Marker({ color: "#ff4444", draggable: true })
             .setLngLat([lng, lat])
             .addTo(map);
 
           markerRef.current.on("dragend", async () => {
             const markerPosition = markerRef.current.getLngLat();
+            map.flyTo({ center: [markerPosition.lng, markerPosition.lat], duration: 600 });
             await updatePinLocation(markerPosition.lng, markerPosition.lat);
           });
         } else {
           markerRef.current.setLngLat([lng, lat]);
         }
+
+        map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 15), duration: 800 });
 
         await updatePinLocation(lng, lat);
       });
@@ -212,6 +224,28 @@ export default function MapboxAddressInput({ value, onChange, onEdit }) {
     };
   }, [isMapOpen, token]);
 
+  const flyMapTo = (lng, lat) => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 15), duration: 1000 });
+
+    const mapboxgl = mapboxModuleRef.current;
+    if (!mapboxgl) return;
+
+    if (!markerRef.current) {
+      markerRef.current = new mapboxgl.Marker({ draggable: true })
+        .setLngLat([lng, lat])
+        .addTo(map);
+
+      markerRef.current.on("dragend", async () => {
+        const pos = markerRef.current.getLngLat();
+        await updatePinLocation(pos.lng, pos.lat);
+      });
+    } else {
+      markerRef.current.setLngLat([lng, lat]);
+    }
+  };
+
   const handleUseCurrentAddress = () => {
     if (!token) {
       setStatusMessage("Mapbox token missing.");
@@ -231,12 +265,21 @@ export default function MapboxAddressInput({ value, onChange, onEdit }) {
         try {
           const { longitude, latitude } = position.coords;
           const address = await reverseGeocode(longitude, latitude);
-          onChange(address);
-          onEdit();
-          setAllowSuggestions(false);
-          setIsFocused(false);
-          setSuggestions([]);
-          setStatusMessage("Current address added.");
+
+          if (isMapOpen) {
+            // Map is open — fly there, place pin, set picked address
+            flyMapTo(longitude, latitude);
+            setPickedCoords({ lng: longitude, lat: latitude });
+            setPickedAddress(address);
+            setStatusMessage("Current location pinned on map.");
+          } else {
+            onChange(address);
+            onEdit();
+            setAllowSuggestions(false);
+            setIsFocused(false);
+            setSuggestions([]);
+            setStatusMessage("Current address added.");
+          }
         } catch {
           setStatusMessage("Could not fetch address for your current location.");
         } finally {
@@ -368,9 +411,22 @@ export default function MapboxAddressInput({ value, onChange, onEdit }) {
               </button>
             </div>
 
-            <div ref={mapContainerRef} className="h-[360px] w-full border border-white/20 touch-none" />
+            <div ref={mapContainerRef} className="h-[360px] sm:h-[420px] w-full border border-white/20" />
 
-            <p className="mt-3 text-xs text-white/65">
+            {/* Locate me inside map modal */}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleUseCurrentAddress}
+                disabled={isLocating}
+                className="inline-flex items-center gap-2 border border-white/25 px-3 py-2 text-xs uppercase tracking-[0.16em] text-white/85 hover:bg-white/10 disabled:opacity-60"
+              >
+                <LocateFixed size={14} />
+                {isLocating ? "Locating..." : "Use My Location"}
+              </button>
+            </div>
+
+            <p className="mt-2 text-xs text-white/65">
               Click anywhere on the map to place a pin. Drag the pin to refine your location.
             </p>
             {pickedCoords && (
