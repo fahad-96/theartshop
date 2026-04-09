@@ -18,6 +18,7 @@ const NAV_SECTIONS = [
 ];
 
 const USER_SECTIONS = [
+  { id: "orders", label: "Orders", icon: "M8 7h8M8 11h8M8 15h5M6 3h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2z", route: "/profile#orders" },
   { id: "wishlist", label: "Wishlist", icon: "M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z", route: "/wishlist" },
   { id: "cart", label: "Cart", icon: "M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z", route: "/cart" },
   { id: "profile", label: "Profile", icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z", route: "/profile" },
@@ -62,6 +63,16 @@ export default function MainHeader() {
     }
     if (id === "home") { navigate("/"); return; }
     navigate(`/#${id}`);
+  };
+
+  const isUserSectionActive = (section) => {
+    const currentRoute = `${location.pathname}${location.hash || ""}`;
+
+    if (section.route.includes("#")) {
+      return currentRoute === section.route;
+    }
+
+    return location.pathname === section.route && !location.hash;
   };
 
   return (
@@ -149,7 +160,7 @@ export default function MainHeader() {
                       type="button"
                       onClick={() => { navigate(section.route); setIsMenuOpen(false); }}
                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-200 ${
-                        location.pathname === section.route
+                        isUserSectionActive(section)
                           ? "bg-white/[0.08] text-white"
                           : "text-white/50 hover:text-white/80 hover:bg-white/[0.04]"
                       }`}
