@@ -366,11 +366,23 @@ export default function AdminDashboardPage() {
     try {
       // Capture order data BEFORE refresh (state won't update in this closure)
       const order = orders.find((o) => o.dbId === orderId);
-      const email = order?.shipping?.email;
+      let email = order?.shipping?.email || "";
       const customerName = order?.shipping?.fullName || "";
       const orderRef = order?.order_ref || orderId;
       const amount = order?.amount;
       const items = order?.items;
+
+      // Fallback: look up email from profiles via the order's user_id
+      if (!email && order?.user_id) {
+        try {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("email")
+            .eq("user_id", order.user_id)
+            .maybeSingle();
+          email = profile?.email || "";
+        } catch {}
+      }
 
       await updateAdminOrderStatus(supabase, orderId, status);
       await refreshOrders();

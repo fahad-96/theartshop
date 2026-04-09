@@ -671,7 +671,7 @@ export function ShopProvider({ children }) {
       currency: "INR",
       status: orderState.status,
       items: orderState.items,
-      shipping: orderState.shipping,
+      shipping: { ...orderState.shipping, email: authUser?.email || "" },
       payment: orderState.payment || {},
     };
 

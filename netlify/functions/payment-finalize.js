@@ -11,14 +11,15 @@ const isNonEmptyString = (value) => typeof value === "string" && value.trim().le
 
 const normalizeEmail = (value) => (typeof value === "string" ? value.trim().toLowerCase() : "");
 
-const normalizeShipping = (shipping) => {
-  if (!shipping || typeof shipping !== "object") return {};
+const normalizeShipping = (shipping, email) => {
+  if (!shipping || typeof shipping !== "object") return { email: email || "" };
   return {
     fullName: String(shipping.fullName || "").trim(),
     phone: String(shipping.phone || "").trim(),
     landmark: String(shipping.landmark || "").trim(),
     pincode: String(shipping.pincode || "").trim(),
     address: String(shipping.address || "").trim(),
+    email: String(shipping.email || email || "").trim(),
   };
 };
 
@@ -54,7 +55,7 @@ export async function handler(event) {
     const amount = Number(body.amount);
     const currency = String(body.currency || "INR").trim() || "INR";
     const items = Array.isArray(body.items) ? body.items : [];
-    const shipping = normalizeShipping(body.shipping);
+    const shipping = normalizeShipping(body.shipping, userEmail);
     const paymentFromClient = body.payment && typeof body.payment === "object" ? body.payment : {};
 
     if (!isNonEmptyString(orderRef)) {
