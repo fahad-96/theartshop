@@ -364,29 +364,38 @@ export default function AdminDashboardPage() {
     if (!status) return;
     setUpdatingOrderId(orderId);
     try {
+      // Capture order data BEFORE refresh (state won't update in this closure)
+      const order = orders.find((o) => o.dbId === orderId);
+      const email = order?.shipping?.email;
+      const customerName = order?.shipping?.fullName || "";
+      const orderRef = order?.order_ref || orderId;
+      const amount = order?.amount;
+      const items = order?.items;
+
       await updateAdminOrderStatus(supabase, orderId, status);
       await refreshOrders();
 
       // Send email notification to customer
-      const order = orders.find((o) => o.dbId === orderId);
-      if (order?.shipping?.email) {
+      if (email) {
         try {
           const notifyUrl = (import.meta.env.VITE_API_BASE_URL || "") + "/api/notify/order-status";
-          await fetch(notifyUrl, {
+          const res = await fetch(notifyUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              orderRef: order.order_ref || order.dbId,
-              status,
-              email: order.shipping.email,
-              customerName: order.shipping?.fullName || "",
-              amount: order.amount,
-              items: order.items,
-            }),
+            body: JSON.stringify({ orderRef, status, email, customerName, amount, items }),
           });
-        } catch { /* email is best-effort */ }
+          const result = await res.json().catch(() => null);
+          if (res.ok && result?.ok) {
+            setFlash(`Status updated to "${status}" & email sent to ${email}.`, "success");
+          } else {
+            setFlash(`Status updated but email failed: ${result?.message || "unknown error"}.`, "error");
+          }
+        } catch (emailErr) {
+          setFlash(`Status updated but email failed: ${emailErr.message || "network error"}.`, "error");
+        }
+      } else {
+        setFlash(`Status updated to "${status}". No customer email on file.`, "success");
       }
-      setFlash("Order status updated & customer notified.", "success");
     } catch (error) {
       setFlash(error.message || "Could not update order status.", "error");
     } finally {
