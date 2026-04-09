@@ -87,15 +87,21 @@ export default function PaymentPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authReady, authUser, snapshot]);
 
-  // ── Save order to DB (fire-and-forget after payment) ──
+  // ── Save order to DB (must complete before navigating) ──
   const saveOrderToDb = async (ref, snap, paymentPayload) => {
-    if (!isSupabaseConfigured || !supabase || !authUser?.id) return;
+    if (!isSupabaseConfigured || !supabase || !authUser?.id) {
+      console.warn("Order save skipped: Supabase not configured or user missing");
+      return;
+    }
+
+    // Refresh session so RLS auth.uid() matches
     try {
       await supabase.auth.getSession();
-    } catch {}
+    } catch (e) {
+      console.warn("Session refresh failed, attempting insert anyway:", e.message);
+    }
 
-    // Insert order with status "Paid"
-    const { error: insertErr } = await supabase.from("orders").insert({
+    const orderData = {
       user_id: authUser.id,
       order_ref: ref,
       amount: snap.subtotal,
@@ -104,10 +110,21 @@ export default function PaymentPage() {
       items: snap.items,
       shipping: snap.shipping,
       payment: paymentPayload,
-    });
+    };
 
-    if (insertErr && !insertErr.message?.toLowerCase().includes("duplicate")) {
-      console.warn("Order save failed:", insertErr.message);
+    // Try up to 2 times
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const { error: insertErr } = await supabase.from("orders").insert(orderData);
+
+      if (!insertErr) return; // success
+
+      if (insertErr.message?.toLowerCase().includes("duplicate")) return; // already saved
+
+      console.warn(`Order save attempt ${attempt} failed:`, insertErr.message);
+
+      if (attempt < 2) {
+        await new Promise((r) => setTimeout(r, 1000)); // wait 1s before retry
+      }
     }
   };
 
@@ -189,14 +206,14 @@ export default function PaymentPage() {
             razorpayPaymentId: result.razorpay_payment_id,
           };
 
-          // Clear cart immediately
-          clearCart();
+          // Save order to DB BEFORE navigating (must finish)
+          await saveOrderToDb(ref, snap, paymentPayload);
 
-          // Navigate to success page right away
+          // Clear cart and navigate to success page
+          clearCart();
           navigate("/order-success", { replace: true });
 
-          // Save order to DB and send email in background
-          saveOrderToDb(ref, snap, paymentPayload);
+          // Send email in background (non-critical)
           sendEmailNotification(ref, snap, paymentPayload);
         },
 
